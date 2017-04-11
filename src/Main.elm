@@ -28,6 +28,7 @@ type Msg
   | AddCol GridUnit
   | RemoveRow
   | RemoveCol
+  | SpanRight Int
 
 update : Msg -> Model -> Model
 update msg model =
@@ -44,6 +45,8 @@ update msg model =
     RemoveCol ->
       Grid.removeCol model
 
+    SpanRight i ->
+      Grid.spanRight i model 
 
 view : Model -> Html Msg
 view model =
@@ -76,11 +79,19 @@ viewColControls =
 viewGrid : Model -> Html Msg
 viewGrid model =
   div [ style <| Grid.gridStyles model ]
-    <| List.map viewSection (Grid.sections model) 
+    <| List.indexedMap viewSection (Grid.sections model) 
 
-viewSection : Section -> Html Msg
-viewSection section =
+viewSection : Int -> Section -> Html Msg
+viewSection i section =
   div 
     [ class "grid-section", style <| Grid.sectionToStyles section 
-    ] [ ]
+    ] 
+    [ viewSectionControls i section
+    ]
+
+viewSectionControls : Int -> Section -> Html Msg
+viewSectionControls i section =
+  div [ class "grid-section-controls" ]
+    [ button [onClick (SpanRight i)] [text ">"]
+    ]
 

@@ -127,3 +127,44 @@ does with overlapping sections. I kind of think I want to try it before getting
 into the mess of inter-section cropping or whatever.
 
 
+_11 Apr 2017_
+
+## Spanning
+
+OK, so CSS-Grid 'underlaps' sections by default. Spanned sections (defined 
+later in css?) appear underneath sections pinned to or spanning the same 
+grid location.
+
+Now, it gets quite hairy to deal with intersections in two dimensions. You
+sometimes get shapes that cannot be represented by a single css element. Like:
+
+  -------------------------------------------------------------------
+  |                                             |                   |
+  |                                             |                   |
+  |   B                                         |    A              |
+  |                                             |                   |
+  |                                             |                   |
+  |                                             |                   |
+  |                                             |                   |
+  -----------------------------------------------                   |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           ------------------------------------------
+
+**B** spans into **A**. Before that, **A** is 
+`grid-area : 1 / 2 / span 2 / span 2`.  What the heck is it afterwards?
+
+This is my proposal for how to deal with this. We have a concept of 'unnamed'
+sections. These are 'placeholders' which other, _named_ sections can span into.
+And the crucial part is: they themselves are single-span. Thus they are easy
+to remove in case of intersection. 
+
+In fact, 'placeholder' is a better name. This should also be built into the
+type.
+
+

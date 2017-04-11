@@ -11,7 +11,8 @@ module Grid exposing
   , sectionToStyles
   , gridStyles
   , cropRight, cropBottom 
-  , empty, mapGrid, mapSections, sections, addRow, addCol, removeRow, removeCol
+  , empty, mapGrid, mapSections, indexedMapSections, sections
+  , addRow, addCol, removeRow, removeCol, spanRight
   )
 
 
@@ -263,6 +264,10 @@ mapSections : (Section -> Section) -> Model -> Model
 mapSections fn (Model {grid, sections}) =
   Model { grid = grid, sections = List.map fn sections }
 
+indexedMapSections : (Int -> Section -> Section) -> Model -> Model
+indexedMapSections fn (Model {grid, sections}) =
+  Model { grid = grid, sections = List.indexedMap fn sections }
+
 sections : Model -> List Section
 sections (Model {sections}) =
   sections
@@ -314,6 +319,21 @@ removeCol (Model {grid, sections}) =
       { grid = removeGridCol grid
       , sections = newSections
       }
+
+spanRight : Int -> Model -> Model
+spanRight n model =
+  let
+    span i (Section section) =
+      let 
+        (row, col) = (section.row, section.col + section.colSpan)
+      in
+        if n == i then
+          Section { section | colSpan = section.colSpan + 1 }
+        else
+          Section section
+  in
+    indexedMapSections span model
+
 
 gridStyles : Model -> List (String, String)
 gridStyles (Model {grid}) =

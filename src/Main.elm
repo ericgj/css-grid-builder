@@ -26,6 +26,8 @@ defaultColUnit = Fr 1
 type Msg 
   = AddRow GridUnit
   | AddCol GridUnit
+  | RemoveRow
+  | RemoveCol
 
 update : Msg -> Model -> Model
 update msg model =
@@ -36,31 +38,39 @@ update msg model =
     AddCol unit ->
       Grid.addCol defaultRowUnit unit model
 
+    RemoveRow ->
+      Grid.removeRow model
+
+    RemoveCol ->
+      Grid.removeCol model
+
 
 view : Model -> Html Msg
 view model =
   div []
    [ div [ class "grid-controls" ]
-     [ viewAddRow 
-     , viewAddCol
+     [ viewRowControls 
+     , viewColControls
      ]
    , div [ class "grid-container" ]
      [ viewGrid model
      ]
    ]
 
-viewAddRow : Html Msg
-viewAddRow =
+viewRowControls : Html Msg
+viewRowControls =
   div []
     [ label [] [text "Row"]
     , button [onClick (AddRow <| defaultRowUnit)] [text "+"]
+    , button [onClick RemoveRow] [text "-"]
     ]
 
-viewAddCol : Html Msg
-viewAddCol =
+viewColControls : Html Msg
+viewColControls =
   div []
     [ label [] [text "Column"]
     , button [onClick (AddCol <| defaultColUnit)] [text "+"]
+    , button [onClick RemoveCol] [text "-"]
     ]
 
 viewGrid : Model -> Html Msg

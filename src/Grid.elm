@@ -298,21 +298,21 @@ addCol rowunit unit (Model {grid, sections}) =
 removeRow : Model -> Model
 removeRow (Model {grid, sections}) =
   let
-    newGrid = removeGridRow grid
+    newSections = cropBottom grid sections
   in
     Model
-      { grid = newGrid
-      , sections = cropBottom newGrid sections
+      { grid = removeGridRow grid
+      , sections = newSections
       }
 
 removeCol : Model -> Model
 removeCol (Model {grid, sections}) =
   let
-    newGrid = removeGridCol grid
+    newSections = cropRight grid sections
   in
     Model
-      { grid = newGrid
-      , sections = cropRight newGrid sections
+      { grid = removeGridCol grid
+      , sections = newSections
       }
 
 gridStyles : Model -> List (String, String)

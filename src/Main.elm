@@ -7,8 +7,15 @@ import Html.Events exposing (onClick, onInput)
 import Grid exposing 
   (Model, GridUnit(..), AbsoluteUnit(..), PositionedSection(..), GridCoord)
 
+type Section
+  = Unnamed
+  | Named String
 
-main : Program Never Model Msg
+emptySection : Section
+emptySection =
+  Unnamed
+
+main : Program Never (Model Section) Msg
 main = 
   beginnerProgram 
     { view = view
@@ -16,7 +23,7 @@ main =
     , model = init
     }
 
-init : Model
+init : Model Section
 init =
   Grid.empty 
     |> Grid.mapGrid (Grid.setGap (Px 10))
@@ -31,8 +38,9 @@ type Msg
   | RemoveCol
   | PlaceNewSection GridCoord
   | RemoveSection GridCoord
+  | ExpandRightward Int
 
-update : Msg -> Model -> Model
+update : Msg -> Model Section -> Model Section
 update msg model =
   case msg of
     AddRow unit ->
@@ -48,12 +56,15 @@ update msg model =
       Grid.removeCol model
  
     PlaceNewSection coord ->
-      Grid.addSectionAndPlaceAt section coord model   -- doesn't work, need to initialize section
+      Grid.addSectionAndPlaceAt emptySection coord model
 
     RemoveSection coord ->
       Grid.removeSectionFrom coord model
 
-view : Model -> Html Msg
+    ExpandRightward i ->
+      Grid.expandSectionRightward i model
+
+view : Model Section -> Html Msg
 view model =
   div []
    [ div [ class "grid-controls" ]
@@ -81,50 +92,84 @@ viewColControls =
     , button [onClick RemoveCol] [text "-"]
     ]
 
-viewGrid : Model -> Html Msg
+viewGrid : Model Section -> Html Msg
 viewGrid model =
   let
-    pSections = Grid.gridSections model 
+    pSections = Grid.gridSections model
   in
     div [ style <| Grid.gridStyles model ]
-      <| List.map viewSection pSections 
+      <| List.map (viewSection model) pSections 
 
-viewSection : PositionedSection -> Html Msg
-viewSection section =
+viewSection : Model Section -> PositionedSection -> Html Msg
+viewSection model psection =
   let
     attrs =
-      case section of
+      case psection of
         Placeholder c ->
           [ onClick <| PlaceNewSection c ]
         PositionedSection c s _ ->
           []
   in
     div 
-      ( [ class "grid-section", style <| Grid.gridSectionStyles section ] ++ attrs 
+      ( [ class "grid-section", style <| Grid.gridSectionStyles psection ] ++ attrs 
       )
-      [ viewSectionControls section
-      , viewSectionBody section
+      [ viewSectionControls model psection
+      , viewSectionBody model psection
       ]
 
-viewSectionControls : PositionedSection -> Html Msg
-viewSectionControls section =
+viewSectionControls : Model Section -> PositionedSection -> Html Msg
+viewSectionControls model psection =
   let
-    controls =
-      case section of
+    canExpand =
+      Grid.gridSectionCanExpand psection model
+
+    canExpandControl accessor tagger index =
+      if accessor canExpand then 
+        Just <| button [onClick (tagger index)] [ text ">"]
+      else
+        Nothing
+
+    canExpandControls =
+      case psection of
+        Placeholder _ ->
+          []
+        PositionedSection c s i ->
+          List.filterMap identity
+            [ (canExpandControl .rightward ExpandRightward i) ]
+      
+    baseControls =
+      case psection of
         Placeholder _ -> 
           []
-        PositionedSection c s _ ->
+        PositionedSection c s i ->
           [ button [onClick <| RemoveSection c ] [text "⨯"]
           ]
           
   in
-    div [ class "grid-section-controls" ] controls
+    div [ class "grid-section-controls" ] (canExpandControls ++ baseControls)
 
-viewSectionBody : PositionedSection -> Html Msg
-viewSectionBody section =
-  div 
-    [ class "grid-section-body" 
-    ]
-    [
-    ]
+viewSectionBody : Model Section -> PositionedSection -> Html Msg
+viewSectionBody model psection =
+  let 
+    contents =
+      case psection of
+        Placeholder _ ->
+          []
+        PositionedSection c s i ->
+          [ Grid.getSection i model
+              |> Maybe.map viewSectionBodyContents
+              |> Maybe.withDefault (text "")
+          ]
+
+  in
+    div [ class "grid-section-body" ] contents
+
+viewSectionBodyContents : Section -> Html Msg
+viewSectionBodyContents section =
+  case section of
+    Unnamed ->
+      text "(unnamed)"
+    Named s ->
+      text s
+
 

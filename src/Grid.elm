@@ -1,21 +1,23 @@
 module Grid exposing 
-  ( Model, Grid, Section, PositionedSection(..)
+  ( Model, Grid, PositionedSection(..)
   , GridCoord, GridUnit(..), AbsoluteUnit(..)
   , empty, mapGrid, mapSections
   , setGap
   , addRow, addCol, removeRow, removeCol
-  , addSection, addSectionAndPlaceAt, placeSectionAt, removeSectionFrom
+  , addSection, getSection, addSectionAndPlaceAt, placeSectionAt, removeSectionFrom
   , gridSections
+  , gridSectionCanExpand
+  , expandSectionRightward
   , gridStyles, gridSectionStyles
  )
 
 import Array exposing (Array)
 import Dict exposing (Dict)
 
-type Model =
+type Model section =
   Model
     { grid : Grid
-    , sections : Array Section
+    , sections : Array section
     }
 
 type Grid =
@@ -41,9 +43,11 @@ type alias GridSpan =
   , colSpan : Int
   }
 
-type Section =
-  Section
-    { name : String }  -- or whatever, besides position in grid
+type GridDirection
+  = Upward
+  | Leftward
+  | Downward
+  | Rightward
 
 type GridUnit
   = Abs AbsoluteUnit
@@ -59,63 +63,81 @@ type AbsoluteUnit
   MODEL
 -------------------------------------------------------------------------------}
 
-empty : Model
+empty : Model section
 empty =
   Model 
     { grid = emptyGrid
     , sections = Array.empty
     }
 
-mapGrid : (Grid -> Grid) -> Model -> Model
+mapGrid : (Grid -> Grid) -> Model section -> Model section
 mapGrid fn (Model model) =
   Model { model | grid = fn model.grid }
 
-mapSections : (Section -> Section) -> Model -> Model
+mapSections : (section -> section) -> Model section -> Model section
 mapSections fn (Model model) =
   Model { model | sections = Array.map fn model.sections }
 
-addRow : GridUnit -> Model -> Model
+addRow : GridUnit -> Model section -> Model section
 addRow unit (Model model) =
   Model { model | grid = addGridRow unit model.grid }  
 
-addCol : GridUnit -> Model -> Model
+addCol : GridUnit -> Model section -> Model section
 addCol unit (Model model) =
   Model { model | grid = addGridCol unit model.grid }
 
-removeRow : Model -> Model
+removeRow : Model section -> Model section
 removeRow (Model model) =
   Model { model | grid = removeGridRow model.grid }
 
-removeCol : Model -> Model
+removeCol : Model section -> Model section
 removeCol (Model model) =
   Model { model | grid = removeGridCol model.grid }
 
-addSectionAndPlaceAt : Section -> GridCoord -> Model -> Model
+addSectionAndPlaceAt : section -> GridCoord -> Model section -> Model section
 addSectionAndPlaceAt section coord model =
   addSection section model
     |> (\(Model newModel) -> ((Array.length newModel.sections) - 1, Model newModel))
     |> (\(i, m) -> placeSectionAt coord i m)
 
-addSection : Section -> Model -> Model
+addSection : section -> Model section -> Model section
 addSection section (Model model) =
   Model { model | sections = Array.push section model.sections }
 
-placeSectionAt : GridCoord -> Int -> Model -> Model
+getSection : Int -> Model section -> Maybe section
+getSection index (Model {sections}) =
+  Array.get index sections
+
+placeSectionAt : GridCoord -> Int -> Model section -> Model section
 placeSectionAt {row,col} index (Model model) =
   Model { model | grid = placeGridContentsAt row col index model.grid }
 
-removeSectionFrom : GridCoord -> Model -> Model
+removeSectionFrom : GridCoord -> Model section -> Model section
 removeSectionFrom {row,col} (Model model) =
   Model { model | grid = removeGridContentsAt row col model.grid }
 
-gridStyles : Model -> List (String,String)
+gridStyles : Model section -> List (String,String)
 gridStyles (Model {grid}) =
   gridToStyles grid
 
-gridSections : Model -> List PositionedSection
+gridSections : Model section -> List PositionedSection
 gridSections (Model {grid}) =
   positionedSectionsInGrid grid
 
+gridSectionCanExpand : PositionedSection -> Model section 
+  -> {upward: Bool, leftward: Bool, downward: Bool, rightward: Bool}
+gridSectionCanExpand psection (Model {grid}) =
+  positionedSectionCanExpand psection grid 
+
+expandSectionRightward : Int -> Model section -> Model section
+expandSectionRightward index (Model model) =
+  let
+    newGrid =
+      positionedSectionsInGrid model.grid
+        |> (\psections -> expandPositionedSection Rightward index psections model.grid)
+  in
+    Model { model | grid = newGrid }
+  
 gridSectionStyles = positionedSectionStyles
 
 {-------------------------------------------------------------------------------
@@ -264,6 +286,10 @@ positionedSectionAt row col index =
     { rowSpan = 1, colSpan = 1 }
     index
 
+mapGridContents : ((Int, Int) -> Maybe Int -> Maybe Int) -> Grid -> Grid
+mapGridContents fn (Grid grid) =
+  Grid { grid | contents = Dict.map fn grid.contents }
+
 foldGridContents : ((Int, Int) -> Maybe Int -> a -> a) -> a -> Grid -> a
 foldGridContents accum initial (Grid {contents}) =
   Dict.foldr accum initial contents
@@ -281,7 +307,7 @@ positionedSectionsInGrid grid =
         newRight = if newCoord.col > oldRight then newCoord.col else oldRight
       in
         ( { row = newTop, col = newLeft }
-        , { rowSpan = newBottom - newTop,  colSpan = newRight - newLeft }
+        , { rowSpan = newBottom - newTop + 1,  colSpan = newRight - newLeft + 1 }
         )
 
     updatePositionedSection row col i psection =
@@ -314,9 +340,84 @@ positionedSectionsInGrid grid =
       |> (\(psections, placeholders) -> Dict.values psections ++ placeholders) 
 
 
+positionedSectionsToGrid : List PositionedSection -> Grid -> Grid
+positionedSectionsToGrid psections (Grid grid) =
+  let
+    accum psection grid =
+      case psection of
+        Placeholder {row,col} ->
+          Dict.insert (row,col) Nothing grid
+        PositionedSection {row,col} {rowSpan,colSpan} i ->
+          let
+            accumSection (r,c) grid_ =
+              Dict.insert (r,c) (Just i) grid_
+          in
+            listCombine (,) 
+              (List.range row (row + rowSpan - 1)) 
+              (List.range col (col + colSpan - 1))
+                |> List.foldr accumSection grid
+  in
+    Grid { grid | contents = List.foldr accum Dict.empty psections }
+
+
 {-------------------------------------------------------------------------------
   POSITIONED SECTION
 -------------------------------------------------------------------------------}
+
+positionedSectionCanExpand : PositionedSection -> Grid
+  -> {upward: Bool, leftward: Bool, downward: Bool, rightward: Bool}
+positionedSectionCanExpand psection (Grid {rows,cols}) =
+  case psection of
+    Placeholder _ ->
+      { upward = False, leftward = False, downward = False, rightward = False }
+
+    PositionedSection {row,col} {rowSpan,colSpan} _ ->
+      { upward =
+          row - 1 > 0
+      , leftward =
+          col - 1 > 0
+      , downward =
+          row + rowSpan < List.length rows
+      , rightward =
+          col + colSpan < List.length cols
+      }
+
+expandPositionedSection : GridDirection -> Int -> List PositionedSection -> Grid -> Grid
+expandPositionedSection direction index psections (Grid {rows,cols} as grid) =
+  let 
+    expand psection =
+      case psection of
+        Placeholder _ ->
+          psection
+        PositionedSection coords spans section ->
+          if index == section then
+            case direction of
+              Upward ->
+                if coords.row - 1 > 0 then 
+                  PositionedSection { coords | row = coords.row - 1 } spans section
+                else
+                  psection
+              Leftward ->
+                if coords.col - 1 > 0 then
+                   PositionedSection { coords | col = coords.col - 1 } spans section
+                else
+                  psection
+              Downward ->
+                if coords.row + spans.rowSpan < List.length rows then
+                  PositionedSection coords { spans | rowSpan = spans.rowSpan + 1 } section
+                else
+                  psection
+              Rightward ->
+                if coords.col + spans.colSpan < List.length cols then
+                  PositionedSection coords { spans | colSpan = spans.colSpan + 1 } section
+                else
+                  psection
+          else
+            psection
+  in
+    List.map expand psections
+      |> (\expanded -> positionedSectionsToGrid expanded grid)
+
 
 positionedSectionStyles : PositionedSection -> List (String, String)
 positionedSectionStyles section =
@@ -349,4 +450,10 @@ placeholderDataToStyles coord =
   , ("border", "1px dashed #CCC")
   ]
 
+
+-- UTILS
+
+listCombine : (a -> b -> c) -> List a -> List b -> List c
+listCombine fn a b =
+  List.concatMap (\a_ -> List.map (\b_ -> fn a_ b_) b ) a
 

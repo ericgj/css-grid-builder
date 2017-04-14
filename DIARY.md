@@ -2,6 +2,153 @@
 
 An experimental elm frontend for designing css-grid layouts 
 
+_12 Apr 2017_
+
+## Spanning: the paint by numbers approach
+
+Another approach is not to store sections themselves, but store _grid_ state,
+which then sections can be derived from.
+
+    type Model =
+      Model
+        { grid : Grid
+        , sections : Array Section
+        }
+
+    type Grid =
+      Grid
+        { rows : List GridUnit
+        , cols : List GridUnit
+        , rowGap : AbsoluteUnit
+        , colGap : AbsoluteUnit
+        , contents : Dict (Int, Int) (Maybe Int)
+        }
+
+    -- Note: derived below
+    type PositionedSection
+      = PositionedSection GridCoord GridSpan Section
+      | Placeholder GridCoord
+        
+    type alias GridCoord =
+      { row : Int
+      , col : Int
+      }
+
+    type alias GridSpan =
+      { rowSpan : Int
+      , colSpan : Int
+      }
+
+    type Section =
+      Section
+        { name : String }  -- or whatever, besides position in grid
+    
+
+    placeholderSectionAt : Int -> Int -> PositionedSection
+    placeholderSectionAt row col =
+      Placeholder { row = row, col = col }
+
+    positionedSectionAt : Int -> Int -> Section -> PositionedSection
+    positionedSectionAt row col section =
+      PositionedSection 
+        { row = row, col = col } 
+        { rowSpan = 1, colSpan = 1 }
+        section
+
+    foldGridContents : ((Int, Int) -> Maybe Int -> a -> a) -> a -> Grid -> a
+    foldGridContents accum initial (Grid {contents}) =
+      Dict.foldr accum initial contents
+
+    gridSections = Model -> List PositionedSection
+    gridSections (Model {grid,sections}) =
+      let
+
+        expandDims newCoord coord span =
+          let
+            (oldTop, oldBottom) = (coord.row, coord.row + span.rowSpan - 1)
+            (oldLeft, oldRight) = (coord.col, coord.col + span.colSpan - 1)
+            newTop = if newCoord.row < oldTop then newCoord.row else oldTop
+            newLeft = if newCoord.col < oldLeft then newCoord.col else oldLeft
+            newBottom = if newCoord.row > oldBottom then newCoord.row else oldBottom
+            newRight = if newCoord.col > oldRight then newCoord.col else oldRight
+          in
+            ( { row = newTop, col = newLeft }
+            , { rowSpan = newBottom - newTop,  colSpan = newRight - newLeft }
+            )
+
+        updatePositionedSection row col i psection =
+           case psection of
+             Placeholder _ ->
+               Array.get i sections
+                 |> Maybe.map (positionedSectionAt row col)
+                 |> Maybe.withDefault (placeholderSectionAt row col)
+
+             PositionedSection coord span section ->
+               let
+                 (newCoord, newSpan) = expandDims {row = row, col = col} coord span
+               in
+                 PositionedSection newCoord newSpan section
+
+        accum (row,col) mindex (psections, placeholders) =
+          let
+            newPlaceholder = placeholderSectionAt row col 
+          in 
+            case mindex of
+              Nothing ->
+                ( psections, newPlaceholder :: placeholders )
+              Just i ->
+                Dict.get i psections
+                  |> Maybe.withDefault newPlaceholder
+                  |> updatePositionedSection row col i
+                  |> (\p -> Dict.insert i p psections)
+            
+        
+      in
+        foldGridContents accum (Dict.empty, []) grid
+          |> (\(psections, placeholders) -> Dict.values psections ++ placeholders) 
+          
+
+
+_11 Apr 2017_
+
+## Spanning
+
+OK, so CSS-Grid 'underlaps' sections by default. Spanned sections (defined 
+later in css?) appear underneath sections pinned to or spanning the same 
+grid location.
+
+Now, it gets quite hairy to deal with intersections in two dimensions. You
+sometimes get shapes that cannot be represented by a single css element. Like:
+
+  -------------------------------------------------------------------
+  |                                             |                   |
+  |                                             |                   |
+  |   B                                         |    A              |
+  |                                             |                   |
+  |                                             |                   |
+  |                                             |                   |
+  |                                             |                   |
+  -----------------------------------------------                   |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           |                                        |
+                           ------------------------------------------
+
+**B** spans into **A**. Before that, **A** is 
+`grid-area : 1 / 2 / span 2 / span 2`.  What the heck is it afterwards?
+
+This is my proposal for how to deal with this. We have a concept of 'unnamed'
+sections. These are 'placeholders' which other, _named_ sections can span into.
+And the crucial part is: they themselves are single-span. Thus they are easy
+to remove in case of intersection. 
+
+In fact, 'placeholder' is a better name. This should also be built into the
+type.
+
 
 _10 Apr 2017_
 
@@ -125,46 +272,5 @@ they are pinned beyond the cropped region.
 The other tricky part is spanning, AKA 'merging'. I am not sure what CSS-Grid
 does with overlapping sections. I kind of think I want to try it before getting
 into the mess of inter-section cropping or whatever.
-
-
-_11 Apr 2017_
-
-## Spanning
-
-OK, so CSS-Grid 'underlaps' sections by default. Spanned sections (defined 
-later in css?) appear underneath sections pinned to or spanning the same 
-grid location.
-
-Now, it gets quite hairy to deal with intersections in two dimensions. You
-sometimes get shapes that cannot be represented by a single css element. Like:
-
-  -------------------------------------------------------------------
-  |                                             |                   |
-  |                                             |                   |
-  |   B                                         |    A              |
-  |                                             |                   |
-  |                                             |                   |
-  |                                             |                   |
-  |                                             |                   |
-  -----------------------------------------------                   |
-                           |                                        |
-                           |                                        |
-                           |                                        |
-                           |                                        |
-                           |                                        |
-                           |                                        |
-                           |                                        |
-                           ------------------------------------------
-
-**B** spans into **A**. Before that, **A** is 
-`grid-area : 1 / 2 / span 2 / span 2`.  What the heck is it afterwards?
-
-This is my proposal for how to deal with this. We have a concept of 'unnamed'
-sections. These are 'placeholders' which other, _named_ sections can span into.
-And the crucial part is: they themselves are single-span. Thus they are easy
-to remove in case of intersection. 
-
-In fact, 'placeholder' is a better name. This should also be built into the
-type.
 
 

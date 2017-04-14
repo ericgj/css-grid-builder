@@ -1,22 +1,22 @@
 module Grid exposing 
-  ( Grid, GridUnit(..), AbsoluteUnit(..)
-  , Section, Name(..)
-  , Model
-  , emptyGrid 
-  , setRowGap, setColGap, setGap
-  , gridRowSize, gridColSize, gridSize, gridRowDim, gridColDim, gridDims
-  , gridToStyles
-  , emptySectionAt, incrSectionRowSpan, decrSectionRowSpan, incrSectionColSpan, decrSectionColSpan
-  , nameSection, unnameSection
-  , sectionToStyles
-  , gridStyles
-  , cropRight, cropBottom 
-  , empty, mapGrid, mapSections, indexedMapSections, sections
-  , addRow, addCol, removeRow, removeCol, spanRight
-  )
+  ( Model, Grid, Section, PositionedSection(..)
+  , GridCoord, GridUnit(..), AbsoluteUnit(..)
+  , empty, mapGrid, mapSections
+  , setGap
+  , addRow, addCol, removeRow, removeCol
+  , addSection, addSectionAndPlaceAt, placeSectionAt, removeSectionFrom
+  , gridSections
+  , gridStyles, gridSectionStyles
+ )
 
+import Array exposing (Array)
+import Dict exposing (Dict)
 
--- GRID
+type Model =
+  Model
+    { grid : Grid
+    , sections : Array Section
+    }
 
 type Grid =
   Grid
@@ -24,7 +24,26 @@ type Grid =
     , cols : List GridUnit
     , rowGap : AbsoluteUnit
     , colGap : AbsoluteUnit
+    , contents : Dict (Int, Int) (Maybe Int)
     }
+
+type PositionedSection
+  = PositionedSection GridCoord GridSpan Int
+  | Placeholder GridCoord
+    
+type alias GridCoord =
+  { row : Int
+  , col : Int
+  }
+
+type alias GridSpan =
+  { rowSpan : Int
+  , colSpan : Int
+  }
+
+type Section =
+  Section
+    { name : String }  -- or whatever, besides position in grid
 
 type GridUnit
   = Abs AbsoluteUnit
@@ -35,29 +54,83 @@ type AbsoluteUnit
   = Px Int
   | Rem Int
 
+
+{-------------------------------------------------------------------------------
+  MODEL
+-------------------------------------------------------------------------------}
+
+empty : Model
+empty =
+  Model 
+    { grid = emptyGrid
+    , sections = Array.empty
+    }
+
+mapGrid : (Grid -> Grid) -> Model -> Model
+mapGrid fn (Model model) =
+  Model { model | grid = fn model.grid }
+
+mapSections : (Section -> Section) -> Model -> Model
+mapSections fn (Model model) =
+  Model { model | sections = Array.map fn model.sections }
+
+addRow : GridUnit -> Model -> Model
+addRow unit (Model model) =
+  Model { model | grid = addGridRow unit model.grid }  
+
+addCol : GridUnit -> Model -> Model
+addCol unit (Model model) =
+  Model { model | grid = addGridCol unit model.grid }
+
+removeRow : Model -> Model
+removeRow (Model model) =
+  Model { model | grid = removeGridRow model.grid }
+
+removeCol : Model -> Model
+removeCol (Model model) =
+  Model { model | grid = removeGridCol model.grid }
+
+addSectionAndPlaceAt : Section -> GridCoord -> Model -> Model
+addSectionAndPlaceAt section coord model =
+  addSection section model
+    |> (\(Model newModel) -> ((Array.length newModel.sections) - 1, Model newModel))
+    |> (\(i, m) -> placeSectionAt coord i m)
+
+addSection : Section -> Model -> Model
+addSection section (Model model) =
+  Model { model | sections = Array.push section model.sections }
+
+placeSectionAt : GridCoord -> Int -> Model -> Model
+placeSectionAt {row,col} index (Model model) =
+  Model { model | grid = placeGridContentsAt row col index model.grid }
+
+removeSectionFrom : GridCoord -> Model -> Model
+removeSectionFrom {row,col} (Model model) =
+  Model { model | grid = removeGridContentsAt row col model.grid }
+
+gridStyles : Model -> List (String,String)
+gridStyles (Model {grid}) =
+  gridToStyles grid
+
+gridSections : Model -> List PositionedSection
+gridSections (Model {grid}) =
+  positionedSectionsInGrid grid
+
+gridSectionStyles = positionedSectionStyles
+
+{-------------------------------------------------------------------------------
+  GRID
+-------------------------------------------------------------------------------}
+
 emptyGrid : Grid
 emptyGrid =
-  Grid { rows = [ ], cols = [ ], rowGap = Px 0, colGap = Px 0 }
-
-addGridRow : GridUnit -> Grid -> Grid
-addGridRow unit (Grid grid) =
-  Grid { grid | rows = (unit :: grid.rows) }
-
-addGridCol : GridUnit -> Grid -> Grid
-addGridCol unit (Grid grid) =
-  Grid { grid | cols = (unit :: grid.cols) }
-
-addGridInitial : GridUnit -> GridUnit -> Grid -> Grid
-addGridInitial rowunit colunit grid =
-  addGridRow rowunit grid |> addGridCol colunit
-
-removeGridRow : Grid -> Grid
-removeGridRow (Grid grid) =
-  Grid { grid | rows = List.tail grid.rows |> Maybe.withDefault [] }
-
-removeGridCol : Grid -> Grid
-removeGridCol (Grid grid) =
-  Grid { grid | cols = List.tail grid.cols |> Maybe.withDefault [] }
+  Grid 
+    { rows = []
+    , cols = []
+    , rowGap = Px 0
+    , colGap = Px 0
+    , contents = Dict.empty
+    }
 
 setRowGap : AbsoluteUnit -> Grid -> Grid
 setRowGap unit (Grid grid) =
@@ -71,34 +144,94 @@ setGap : AbsoluteUnit -> Grid -> Grid
 setGap unit (Grid grid) =
   Grid { grid | rowGap = unit, colGap = unit }
 
-gridRowSize : Grid -> Int
-gridRowSize (Grid grid) =
-  List.length grid.rows
+addGridRow : GridUnit -> Grid -> Grid
+addGridRow unit (Grid grid) =
+  let
+    colIndexes =
+      List.range 0 <| List.length grid.cols - 1
+    newRows = 
+      unit :: grid.rows
+    newContents = 
+      let
+        accum colindex contents =
+          Dict.insert (List.length newRows - 1, colindex) Nothing contents
+      in
+        List.foldr accum grid.contents colIndexes
+  in
+    Grid { grid | rows = newRows, contents = newContents }
 
-gridColSize : Grid -> Int
-gridColSize (Grid grid) =
-  List.length grid.cols
+addGridCol : GridUnit -> Grid -> Grid
+addGridCol unit (Grid grid) =
+  let
+    rowIndexes =
+      List.range 0 <| List.length grid.rows - 1
+    newCols = 
+      unit :: grid.cols
+    newContents = 
+      let
+        accum rowindex contents =
+          Dict.insert (rowindex, List.length newCols - 1) Nothing contents
+      in
+        List.foldr accum grid.contents rowIndexes
+  in
+    Grid { grid | cols = newCols, contents = newContents }
 
-gridSize : Grid -> (Int, Int)
-gridSize grid =
-  ( gridRowSize grid, gridColSize grid )
+removeGridRow : Grid -> Grid
+removeGridRow (Grid grid) =
+  let
+    colIndexes =
+      List.range 0 <| List.length grid.cols - 1
+    newRows =
+      List.tail grid.rows |> Maybe.withDefault []
+    newContents =
+      let
+        accum colindex contents =
+          Dict.remove (List.length newRows, colindex) contents
+      in
+        List.foldr accum grid.contents colIndexes
+  in
+    Grid { grid | rows = newRows, contents = newContents }
 
-gridRowDim : Grid -> Int
-gridRowDim (Grid grid) =
-  List.length grid.rows - 1
+removeGridCol : Grid -> Grid
+removeGridCol (Grid grid) =
+  let
+    rowIndexes =
+      List.range 0 <| List.length grid.rows - 1
+    newCols = 
+      List.tail grid.cols |> Maybe.withDefault []
+    newContents = 
+      let
+        accum rowindex contents =
+          Dict.remove (rowindex, List.length newCols) contents
+      in
+        List.foldr accum grid.contents rowIndexes
+  in
+    Grid { grid | cols = newCols, contents = newContents }
 
-gridColDim : Grid -> Int
-gridColDim (Grid grid) =
-  List.length grid.cols - 1
 
-gridDims : Grid -> (Int, Int)
-gridDims grid =
-  ( gridRowDim grid, gridColDim grid )
+placeGridContentsAt : Int -> Int -> Int -> Grid -> Grid
+placeGridContentsAt row col index (Grid grid) =
+  if (List.length grid.rows - 1) < row || (List.length grid.cols - 1) < col then
+    Grid grid   -- do nothing if coords are outside current grid
+  else
+    Grid { grid | contents = Dict.insert (row,col) (Just index) grid.contents }
 
-isEmptyGrid : Grid -> Bool
-isEmptyGrid grid =
-  gridSize grid == (0,0)
+removeGridContentsAt : Int -> Int -> Grid -> Grid
+removeGridContentsAt row col (Grid grid) =
+  if (List.length grid.rows - 1) < row || (List.length grid.cols - 1) < col then
+    Grid grid   -- do nothing if coords are outside current grid
+  else
+    Grid { grid | contents = Dict.insert (row,col) Nothing grid.contents }
 
+
+gridToStyles : Grid -> List (String, String)
+gridToStyles (Grid {rows, cols, colGap, rowGap}) =
+  [ ("display", "grid")
+  , ("grid-row-gap", absoluteUnitToString rowGap)
+  , ("grid-column-gap", absoluteUnitToString colGap)
+  , ("grid-template-rows", gridRowsToString rows)
+  , ("grid-template-columns", gridColsToString cols)
+  ]
 
 absoluteUnitToString : AbsoluteUnit -> String
 absoluteUnitToString unit =
@@ -117,236 +250,103 @@ gridRowsToString = List.map gridUnitToString >> List.reverse >> String.join " "
 
 gridColsToString = List.map gridUnitToString >> List.reverse >> String.join " "
 
-gridToStyles : Grid -> List (String, String)
-gridToStyles (Grid {rows, cols, colGap, rowGap}) =
-  [ ("display", "grid")
-  , ("grid-row-gap", absoluteUnitToString rowGap)
-  , ("grid-column-gap", absoluteUnitToString colGap)
-  , ("grid-template-rows", gridRowsToString rows)
-  , ("grid-template-columns", gridColsToString cols)
-  ]
 
+-- Derivation of positioned sections
 
--- SECTIONS
+placeholderSectionAt : Int -> Int -> PositionedSection
+placeholderSectionAt row col =
+  Placeholder { row = row, col = col }
 
-type alias Sections = List Section
+positionedSectionAt : Int -> Int -> Int -> PositionedSection
+positionedSectionAt row col index =
+  PositionedSection 
+    { row = row, col = col } 
+    { rowSpan = 1, colSpan = 1 }
+    index
 
-type Section =
-  Section
-    { row : Int
-    , col : Int
-    , rowSpan : Int
-    , colSpan : Int
-    , name : Name
-    }
+foldGridContents : ((Int, Int) -> Maybe Int -> a -> a) -> a -> Grid -> a
+foldGridContents accum initial (Grid {contents}) =
+  Dict.foldr accum initial contents
 
-type Name
-  = Named String
-  | Unnamed
-
-emptySectionAt : Int -> Int -> Section
-emptySectionAt row col =
-  Section { row = row, col = col, rowSpan = 1, colSpan = 1, name = Unnamed }
-
-incrSectionRowSpan : Section -> Section
-incrSectionRowSpan (Section section) =
-  Section { section | rowSpan = section.rowSpan + 1 }
-
-decrSectionRowSpan : Section -> Section
-decrSectionRowSpan (Section section) =
-  Section { section | rowSpan = clampMin 1 <| section.rowSpan - 1 }
-
-incrSectionColSpan : Section -> Section
-incrSectionColSpan (Section section) =
-  Section { section | colSpan = section.colSpan + 1 }
-
-decrSectionColSpan : Section -> Section
-decrSectionColSpan (Section section) =
-  Section { section | colSpan = clampMin 1 <| section.colSpan - 1 }
-
-nameSection : String -> Section -> Section
-nameSection name (Section section) =
-  Section { section | name = Named name }
-
-unnameSection : Section -> Section
-unnameSection (Section section) =
-  Section { section | name = Unnamed }
-
-swapSectionsPair : (Section, Section) -> (Section, Section)
-swapSectionsPair (Section a, Section b) =
-  ( Section { a | row = b.row, col = b.col, rowSpan = b.rowSpan, colSpan = b.colSpan }
-  , Section { b | row = a.row, col = a.col, rowSpan = a.rowSpan, colSpan = a.colSpan }
-  )
-
-
-
-cropRightOrNothing : Int -> Section -> Maybe Section
-cropRightOrNothing cols (Section section) =
-  if section.col >= cols then
-    Nothing
-  else
-    if (section.col + section.colSpan) >= cols then
-      Just (Section { section | colSpan = cols - section.col })
-    else
-      Just (Section section)
-
-cropBottomOrNothing : Int -> Section -> Maybe Section
-cropBottomOrNothing rows (Section section) =
-  if section.row >= rows then
-    Nothing
-  else
-    if (section.row + section.rowSpan) >= rows then
-      Just (Section { section | rowSpan = rows - section.row })
-    else
-      Just (Section section)
-
-
-sectionToStyles : Section -> List (String, String)
-sectionToStyles (Section section) =
+positionedSectionsInGrid : Grid -> List PositionedSection
+positionedSectionsInGrid grid =
   let
-    stringDim n span = 
-      if span == 1 then 
+    expandDims newCoord coord span =
+      let
+        (oldTop, oldBottom) = (coord.row, coord.row + span.rowSpan - 1)
+        (oldLeft, oldRight) = (coord.col, coord.col + span.colSpan - 1)
+        newTop = if newCoord.row < oldTop then newCoord.row else oldTop
+        newLeft = if newCoord.col < oldLeft then newCoord.col else oldLeft
+        newBottom = if newCoord.row > oldBottom then newCoord.row else oldBottom
+        newRight = if newCoord.col > oldRight then newCoord.col else oldRight
+      in
+        ( { row = newTop, col = newLeft }
+        , { rowSpan = newBottom - newTop,  colSpan = newRight - newLeft }
+        )
+
+    updatePositionedSection row col i psection =
+       case psection of
+         Placeholder _ ->
+           positionedSectionAt row col i
+
+         PositionedSection coord span _ ->
+           let
+             (newCoord, newSpan) = expandDims {row = row, col = col} coord span
+           in
+             PositionedSection newCoord newSpan i
+
+    accum (row,col) mindex (psections, placeholders) =
+      let
+        newPlaceholder = placeholderSectionAt row col 
+      in 
+        case mindex of
+          Nothing ->
+            ( psections, newPlaceholder :: placeholders )
+          Just i ->
+            ( Dict.get i psections
+                |> Maybe.withDefault newPlaceholder
+                |> updatePositionedSection row col i
+                |> (\p -> Dict.insert i p psections)
+            , placeholders
+            )
+  in
+    foldGridContents accum (Dict.empty, []) grid
+      |> (\(psections, placeholders) -> Dict.values psections ++ placeholders) 
+
+
+{-------------------------------------------------------------------------------
+  POSITIONED SECTION
+-------------------------------------------------------------------------------}
+
+positionedSectionStyles : PositionedSection -> List (String, String)
+positionedSectionStyles section =
+  case section of
+    Placeholder coord ->
+      placeholderDataToStyles coord
+    PositionedSection coord span _ ->
+      sectionDataToStyles coord span
+
+sectionDataToStyles : GridCoord -> GridSpan -> List (String, String)
+sectionDataToStyles coord span =
+  let
+    stringDim n sz = 
+      if sz == 1 then 
         (toString (n+1)) 
       else 
-        ((toString (n+1)) ++ " / " ++ "span " ++ (toString span))
+        ((toString (n+1)) ++ " / " ++ "span " ++ (toString sz))
   in
-    [ ("grid-row", stringDim section.row section.rowSpan)
-    , ("grid-column", stringDim section.col section.colSpan)
+    [ ("grid-row", stringDim coord.row span.rowSpan)
+    , ("grid-column", stringDim coord.col span.colSpan)
+    , ("background-color", "#FFF")
+    , ("border", "1px solid #CCC")
     ]
 
+placeholderDataToStyles : GridCoord -> List (String, String)
+placeholderDataToStyles coord =
+  [ ("grid-row", coord.row + 1 |> toString)
+  , ("grid-column", coord.col + 1 |> toString)
+  , ("background-color", "inherit")
+  , ("border", "1px dashed #CCC")
+  ]
 
--- INTERACTIONS
-
-addRowSections : Grid -> Sections -> Sections
-addRowSections grid sections =
-  List.range 0 (gridColDim grid)
-    |> List.map (emptySectionAt (gridRowDim grid))
-    |> (++) sections
-
-addColSections : Grid -> Sections -> Sections
-addColSections grid sections =
-  List.range 0 (gridRowDim grid)
-    |> List.map (\row -> emptySectionAt row (gridColDim grid))
-    |> (++) sections
-
-
-cropRight : Grid -> Sections -> Sections
-cropRight grid sections =
-  List.filterMap (cropRightOrNothing (gridColDim grid)) sections
-
-cropBottom : Grid -> Sections -> Sections
-cropBottom grid sections =
-  List.filterMap (cropBottomOrNothing (gridRowDim grid)) sections
-
-
-{- TODO
-swapSections : Int -> Int -> Sections -> Sections
-swapSections x y sections =
-  sections
--}
-
-
-type Model =
-  Model
-    { grid : Grid
-    , sections : Sections
-    }
-
-empty : Model
-empty =
-  Model { grid = emptyGrid, sections = [] }
-
-mapGrid : (Grid -> Grid) -> Model -> Model
-mapGrid fn (Model {grid, sections}) =
-  Model { grid = fn grid, sections = sections }
-
-mapSections : (Section -> Section) -> Model -> Model
-mapSections fn (Model {grid, sections}) =
-  Model { grid = grid, sections = List.map fn sections }
-
-indexedMapSections : (Int -> Section -> Section) -> Model -> Model
-indexedMapSections fn (Model {grid, sections}) =
-  Model { grid = grid, sections = List.indexedMap fn sections }
-
-sections : Model -> List Section
-sections (Model {sections}) =
-  sections
-
-addRow : GridUnit -> GridUnit -> Model -> Model
-addRow unit colunit (Model {grid, sections}) =
-  let
-    newGrid = 
-      if isEmptyGrid grid then
-        addGridInitial unit colunit grid
-      else
-        addGridRow unit grid
-  in
-    Model 
-      { grid = newGrid  
-      , sections = addRowSections newGrid sections
-    }
-
-addCol : GridUnit -> GridUnit -> Model -> Model
-addCol rowunit unit (Model {grid, sections}) =
-  let
-    newGrid = 
-      if isEmptyGrid grid then
-        addGridInitial rowunit unit grid
-      else
-        addGridCol unit grid
-  in
-    Model 
-      { grid = newGrid  
-      , sections = addColSections newGrid sections
-      }
-
-removeRow : Model -> Model
-removeRow (Model {grid, sections}) =
-  let
-    newSections = cropBottom grid sections
-  in
-    Model
-      { grid = removeGridRow grid
-      , sections = newSections
-      }
-
-removeCol : Model -> Model
-removeCol (Model {grid, sections}) =
-  let
-    newSections = cropRight grid sections
-  in
-    Model
-      { grid = removeGridCol grid
-      , sections = newSections
-      }
-
-spanRight : Int -> Model -> Model
-spanRight n model =
-  let
-    span i (Section section) =
-      let 
-        (row, col) = (section.row, section.col + section.colSpan)
-      in
-        if n == i then
-          Section { section | colSpan = section.colSpan + 1 }
-        else
-          Section section
-  in
-    indexedMapSections span model
-
-
-gridStyles : Model -> List (String, String)
-gridStyles (Model {grid}) =
-  gridToStyles grid
-
-
-
--- UTILS
-
-clampMin : Int -> Int -> Int
-clampMin min n =
-  if n < min then
-    min
-  else
-    n
 

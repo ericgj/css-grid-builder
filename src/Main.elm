@@ -4,7 +4,8 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 
-import Grid exposing (Model, Section, AbsoluteUnit(..), GridUnit(..))
+import Grid exposing 
+  (Model, GridUnit(..), AbsoluteUnit(..), PositionedSection(..), GridCoord)
 
 
 main : Program Never Model Msg
@@ -28,25 +29,29 @@ type Msg
   | AddCol GridUnit
   | RemoveRow
   | RemoveCol
-  | SpanRight Int
+  | PlaceNewSection GridCoord
+  | RemoveSection GridCoord
 
 update : Msg -> Model -> Model
 update msg model =
   case msg of
     AddRow unit ->
-      Grid.addRow unit defaultColUnit model
+      Grid.addRow unit model
 
     AddCol unit ->
-      Grid.addCol defaultRowUnit unit model
+      Grid.addCol unit model
 
     RemoveRow ->
       Grid.removeRow model
 
     RemoveCol ->
       Grid.removeCol model
+ 
+    PlaceNewSection coord ->
+      Grid.addSectionAndPlaceAt section coord model   -- doesn't work, need to initialize section
 
-    SpanRight i ->
-      Grid.spanRight i model 
+    RemoveSection coord ->
+      Grid.removeSectionFrom coord model
 
 view : Model -> Html Msg
 view model =
@@ -78,20 +83,48 @@ viewColControls =
 
 viewGrid : Model -> Html Msg
 viewGrid model =
-  div [ style <| Grid.gridStyles model ]
-    <| List.indexedMap viewSection (Grid.sections model) 
+  let
+    pSections = Grid.gridSections model 
+  in
+    div [ style <| Grid.gridStyles model ]
+      <| List.map viewSection pSections 
 
-viewSection : Int -> Section -> Html Msg
-viewSection i section =
+viewSection : PositionedSection -> Html Msg
+viewSection section =
+  let
+    attrs =
+      case section of
+        Placeholder c ->
+          [ onClick <| PlaceNewSection c ]
+        PositionedSection c s _ ->
+          []
+  in
+    div 
+      ( [ class "grid-section", style <| Grid.gridSectionStyles section ] ++ attrs 
+      )
+      [ viewSectionControls section
+      , viewSectionBody section
+      ]
+
+viewSectionControls : PositionedSection -> Html Msg
+viewSectionControls section =
+  let
+    controls =
+      case section of
+        Placeholder _ -> 
+          []
+        PositionedSection c s _ ->
+          [ button [onClick <| RemoveSection c ] [text "⨯"]
+          ]
+          
+  in
+    div [ class "grid-section-controls" ] controls
+
+viewSectionBody : PositionedSection -> Html Msg
+viewSectionBody section =
   div 
-    [ class "grid-section", style <| Grid.sectionToStyles section 
-    ] 
-    [ viewSectionControls i section
+    [ class "grid-section-body" 
     ]
-
-viewSectionControls : Int -> Section -> Html Msg
-viewSectionControls i section =
-  div [ class "grid-section-controls" ]
-    [ button [onClick (SpanRight i)] [text ">"]
+    [
     ]
 

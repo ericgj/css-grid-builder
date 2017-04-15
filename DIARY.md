@@ -2,6 +2,185 @@
 
 An experimental elm frontend for designing css-grid layouts 
 
+_14 Apr 2017_
+
+Ok, a simpler approach. Rectangle intersection is not really hard to do, and is
+cheap. The keys here are:
+
+  - Calling context manages sections
+
+  - Placeholders are derived looking at every coordinate of the grid, does it
+    fall within any of the sections. It sounds expensive (n^4), but of course 
+    at the grid dimensions we are talking about it makes no difference.
+
+
+
+    type Grid =
+      Grid
+        { rows : List GridUnit
+        , cols : List GridUnit
+        , rowGap : AbsoluteUnit
+        , colGap : AbsoluteUnit
+        }
+
+    type Section =
+      Section
+        { row : Int
+        , col : Int
+        , rowSpan : Int
+        , colSpan : Int
+        }
+
+    type Placeholder =
+      Placeholder
+        { row : Int
+        , col : Int
+        }
+
+    type SectionElement
+      = SectionElement Section
+      | PlaceholderElement Placeholder
+
+    type alias Rect = 
+      { top : Int
+      , left : Int
+      , bottom : Int
+      , right : Int
+      }
+
+
+    sectionRect : Section -> Rect
+    sectionRect (Section {row,col,rowSpan,colSpan}) =
+      { top : row
+      , left : col
+      , bottom : row + rowSpan - 1
+      , right : col + colSpan - 1 
+      )
+
+    rectSection : Rect -> Section
+    rectSection {top,left,bottom,right} =
+      Section { row = top, col = left, rowSpan = bottom - top, colSpan = right - left }
+
+    gridRect : Grid -> Rect
+    gridRect (Grid {rows,cols}) =
+      ( top : 0
+      , left : 0
+      , bottom : List.length rows - 1
+      , right : List.length cols - 1 
+      )
+
+    rectIntersects : Rect -> Rect -> Bool
+    rectIntersects a b =
+      (a.right >= b.left && a.left <= b.right) && 
+      (a.bottom >= b.top && a.top <= b.bottom)
+
+    rectInside : Rect -> Rect -> Bool
+    rectInside a b =
+      (a.left >= b.left && a.right <= b.right) && 
+      (a.top >= b.top && a.bottom <= b.bottom)
+
+    rectIntersection : Rect -> Rect -> Maybe Rect
+    rectIntersection a b =
+      let
+        min x y = if x < y then x else y
+        max x y = if x > y then x else y
+      in 
+        if rectIntersects a b then
+          Just
+            { top : max a.top b.top
+            , left : max a.left b.left
+            , bottom : min a.bottom b.bottom
+            , right : min a.right b.right
+            }
+        else
+          Nothing
+
+    sectionIntersects : Section -> Section -> Bool
+    sectionIntersects a b =
+      rectIntersects (sectionRect a) (sectionRect b)
+
+    sectionInsideGrid : Section -> Grid -> Bool
+    sectionInsideGrid section grid = 
+      rectInside (sectionRect section) (gridRect grid)
+
+    sectionIntersection : Section -> Section -> Maybe Section
+    sectionIntersection a b =
+      rectIntersection (sectionRect a) (sectionRect b)
+        |> Maybe.map rectSection
+
+    sectionExpand : GridDirection -> Grid -> Section -> Maybe Section
+    sectionExpand direction grid (Section section) =
+      let
+        newSection =
+          case direction of
+            Rightward ->
+              Section { section | colSpan = section.colSpan + 1 }
+            Downward ->
+              Section { section | rowSpan = section.rowSpan + 1 }
+            Leftward ->
+              Section { section | col = section.col - 1, colSpan = section.colSpan + 1 }
+            Upward ->
+              Section { section | row = section.row - 1, rowSpan = section.rowSpan + 1 }
+      in
+        if rectInside (sectionRect newSection) (gridRect grid) then
+          Just newSection
+        else
+          Nothing
+
+    sectionShift : GridDirection -> Grid -> Section -> Maybe Section
+    sectionShift direction grid (Section section) =
+      let
+        newSection =
+          case direction of
+            Rightward ->
+              Section { section | col = section.col + 1 }
+            Downward ->
+              Section { section | row = section.row + 1 }
+            Leftward ->
+              Section { section | col = section.col - 1 }
+            Upward ->
+              Section { section | row = section.row - 1 }
+      in
+        if rectInside (sectionRect newSection) (gridRect grid) then
+          Just newSection
+        else
+          Nothing
+
+    canPlaceSection : Grid -> Section -> List Section -> Bool
+    canPlaceSection grid section sections =
+      (List.all (not << sectionIntersects section) sections) &&
+      (sectionInsideGrid section grid)
+
+    placeSection : Grid -> Section -> List Section -> List Section
+    placeSection grid section sections =
+      if canPlaceSection grid section sections then
+        section :: sections
+      else
+        sections
+
+    gridCoords : Grid -> List (Int, Int)
+    gridCoords (Grid {rows,cols}) =
+      listCombine (,) 
+        (List.range 0 <| List.length rows - 1)
+        (List.range 0 <| List.length cols - 1)
+
+    gridSectionElements : Grid -> List Section -> List SectionElements
+    gridSectionElements grid sections =
+      let
+        accum (row,col) elements =
+          let r = {top = row, left = col, bottom = row, right = col}
+          in
+            if List.any (sectionRect >> rectInside r) sections then
+              elements
+            else
+              Placeholder { row = row, col = col } :: elements
+      in
+        gridCoords grid
+          |> List.foldr accum []
+
+
+    
+
 _12 Apr 2017_
 
 ## Spanning: the paint by numbers approach

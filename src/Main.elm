@@ -5,17 +5,10 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 
 import Grid exposing 
-  (Model, GridUnit(..), AbsoluteUnit(..), PositionedSection(..), GridCoord)
+  (Model, Section, Placeholder, SectionElement(..), AbsoluteUnit(..), GridUnit(..))
 
-type Section
-  = Unnamed
-  | Named String
 
-emptySection : Section
-emptySection =
-  Unnamed
-
-main : Program Never (Model Section) Msg
+main : Program Never Model Msg
 main = 
   beginnerProgram 
     { view = view
@@ -23,7 +16,7 @@ main =
     , model = init
     }
 
-init : Model Section
+init : Model
 init =
   Grid.empty 
     |> Grid.mapGrid (Grid.setGap (Px 10))
@@ -36,18 +29,19 @@ type Msg
   | AddCol GridUnit
   | RemoveRow
   | RemoveCol
-  | PlaceNewSection GridCoord
-  | RemoveSection GridCoord
-  | ExpandRightward Int
+  | AddSection Placeholder
+  | RemoveSection Section
+  | ExpandRightward Section
+  | ExpandLeftward Section
 
-update : Msg -> Model Section -> Model Section
+update : Msg -> Model -> Model
 update msg model =
   case msg of
     AddRow unit ->
-      Grid.addRow unit model
+      Grid.addRow unit defaultColUnit model
 
     AddCol unit ->
-      Grid.addCol unit model
+      Grid.addCol unit defaultRowUnit model
 
     RemoveRow ->
       Grid.removeRow model
@@ -55,16 +49,19 @@ update msg model =
     RemoveCol ->
       Grid.removeCol model
  
-    PlaceNewSection coord ->
-      Grid.addSectionAndPlaceAt emptySection coord model
+    AddSection placeholder ->
+      Grid.addSection placeholder model
 
-    RemoveSection coord ->
-      Grid.removeSectionFrom coord model
+    RemoveSection section ->
+      Grid.removeSection section model
 
-    ExpandRightward i ->
-      Grid.expandSectionRightward i model
+    ExpandLeftward section ->
+      Grid.expandLeftward section model
 
-view : Model Section -> Html Msg
+    ExpandRightward section ->
+      Grid.expandRightward section model
+
+view : Model -> Html Msg
 view model =
   div []
    [ div [ class "grid-controls" ]
@@ -92,84 +89,59 @@ viewColControls =
     , button [onClick RemoveCol] [text "-"]
     ]
 
-viewGrid : Model Section -> Html Msg
+viewGrid : Model -> Html Msg
 viewGrid model =
-  let
-    pSections = Grid.gridSections model
-  in
-    div [ style <| Grid.gridStyles model ]
-      <| List.map (viewSection model) pSections 
+  div [ style <| Grid.gridStyles model ]
+    <| List.map (viewSection model) (Grid.sectionElements model) 
 
-viewSection : Model Section -> PositionedSection -> Html Msg
-viewSection model psection =
+viewSection : Model -> SectionElement -> Html Msg
+viewSection model el =
   let
     attrs =
-      case psection of
-        Placeholder c ->
-          [ onClick <| PlaceNewSection c ]
-        PositionedSection c s _ ->
+      case el of
+        PlaceholderElement placeholder ->
+          [ onClick <| AddSection placeholder ]
+        SectionElement _ ->
           []
   in
     div 
-      ( [ class "grid-section", style <| Grid.gridSectionStyles psection ] ++ attrs 
+      ( [ class "grid-section", style <| Grid.gridSectionStyles el ] ++ attrs 
       )
-      [ viewSectionControls model psection
-      , viewSectionBody model psection
+      [ viewSectionControls model el
+      , viewSectionBody el
       ]
 
-viewSectionControls : Model Section -> PositionedSection -> Html Msg
-viewSectionControls model psection =
+viewSectionControls : Model -> SectionElement -> Html Msg
+viewSectionControls model el =
   let
-    canExpand =
-      Grid.gridSectionCanExpand psection model
+    canExpand section =
+      Grid.canExpand section model
 
-    canExpandControl accessor tagger index =
-      if accessor canExpand then 
-        Just <| button [onClick (tagger index)] [ text ">"]
-      else
-        Nothing
+    expandButton msg symb =
+      button [onClick <| msg] [text symb]
 
-    canExpandControls =
-      case psection of
-        Placeholder _ ->
+    spanControls section =
+      let
+        exp = canExpand section 
+      in
+        ( if exp.leftward then [ expandButton (ExpandLeftward section) "<" ] else [])   ++
+        ( if exp.rightward then [ expandButton (ExpandRightward section) ">" ] else [])
+
+    controls =
+      case el of
+        PlaceholderElement _ -> 
           []
-        PositionedSection c s i ->
-          List.filterMap identity
-            [ (canExpandControl .rightward ExpandRightward i) ]
-      
-    baseControls =
-      case psection of
-        Placeholder _ -> 
-          []
-        PositionedSection c s i ->
-          [ button [onClick <| RemoveSection c ] [text "⨯"]
-          ]
-          
+        SectionElement section ->
+          [ button [onClick <| RemoveSection section] [text "⨯"] ]
+          ++ (spanControls section)
   in
-    div [ class "grid-section-controls" ] (canExpandControls ++ baseControls)
+    div [ class "grid-section-controls" ] controls
 
-viewSectionBody : Model Section -> PositionedSection -> Html Msg
-viewSectionBody model psection =
-  let 
-    contents =
-      case psection of
-        Placeholder _ ->
-          []
-        PositionedSection c s i ->
-          [ Grid.getSection i model
-              |> Maybe.map viewSectionBodyContents
-              |> Maybe.withDefault (text "")
-          ]
-
-  in
-    div [ class "grid-section-body" ] contents
-
-viewSectionBodyContents : Section -> Html Msg
-viewSectionBodyContents section =
-  case section of
-    Unnamed ->
-      text "(unnamed)"
-    Named s ->
-      text s
-
+viewSectionBody : SectionElement -> Html Msg
+viewSectionBody el =
+  div 
+    [ class "grid-section-body" 
+    ]
+    [
+    ]
 

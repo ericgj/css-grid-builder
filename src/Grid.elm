@@ -2,8 +2,9 @@ module Grid exposing
   ( Model, Section, Placeholder, SectionElement(..), AbsoluteUnit(..), GridUnit(..)
   , empty, mapGrid
   , addRow, addCol, removeRow, removeCol
-  , addSection, removeSection, place, sectionElements, gridStyles, gridSectionStyles
-  , canExpand, expandLeftward, expandRightward
+  , addSection, removeSection, placeSection
+  , canExpandSection, expandSectionLeftward, expandSectionRightward
+  , sectionElements, gridStyles, gridSectionStyles
   , setRowGap, setColGap, setGap
   )
 
@@ -108,32 +109,32 @@ removeCol (Model model) =
 
 addSection : Placeholder -> Model -> Model
 addSection (Placeholder {row,col}) model =
-  place (sectionAt (row,col)) model
+  placeSection (sectionAt (row,col)) model
 
 removeSection : Section -> Model -> Model
 removeSection section (Model model) =
-  Model { model | sections = removeSectionFrom section model.sections }
+  Model { model | sections = sectionRemoveFrom section model.sections }
 
-place : Section -> Model -> Model
-place section (Model model) =
-  Model { model | sections = placeSectionIn model.grid section model.sections }
+placeSection : Section -> Model -> Model
+placeSection section (Model model) =
+  Model { model | sections = sectionPlaceIn model.grid section model.sections }
 
-canExpand : Section -> Model
+canExpandSection : Section -> Model
   -> { upward : Bool, leftward : Bool, downward : Bool, rightward : Bool }
-canExpand section (Model {grid,sections}) =
-  canExpandSection grid section sections
+canExpandSection section (Model {grid,sections}) =
+  sectionCanExpand grid section sections
 
-expand : GridDirection -> Section -> Model -> Model
-expand direction section (Model model) =
+expandSection : GridDirection -> Section -> Model -> Model
+expandSection direction section (Model model) =
   let
     model_ = removeSection section (Model model)
   in
     sectionExpand direction model.grid section 
-      |> Maybe.map (\s -> place s model_)
+      |> Maybe.map (\s -> placeSection s model_)
       |> Maybe.withDefault model_
 
-expandRightward = expand Rightward
-expandLeftward = expand Leftward
+expandSectionRightward = expandSection Rightward
+expandSectionLeftward = expandSection Leftward
 
 sectionElements : Model -> List SectionElement
 sectionElements (Model {grid,sections}) =
@@ -225,24 +226,24 @@ sectionAt : (Int, Int) -> Section
 sectionAt (row, col) =
   rectSection {top = row, left = col, bottom = row, right = col}
 
-canPlaceSectionIn : Grid -> Section -> List Section -> Bool
-canPlaceSectionIn grid section sections =
+sectionCanBePlacedIn : Grid -> Section -> List Section -> Bool
+sectionCanBePlacedIn grid section sections =
   (List.all (not << sectionIntersects section) sections) &&
   (sectionInsideGrid section grid)
 
-placeSectionIn : Grid -> Section -> List Section -> List Section
-placeSectionIn grid section sections =
-  if canPlaceSectionIn grid section sections then
+sectionPlaceIn : Grid -> Section -> List Section -> List Section
+sectionPlaceIn grid section sections =
+  if sectionCanBePlacedIn grid section sections then
     section :: sections
   else
     sections
 
-canExpandSection : Grid -> Section -> List Section
+sectionCanExpand : Grid -> Section -> List Section
   -> { upward : Bool, leftward : Bool, downward : Bool, rightward : Bool }
-canExpandSection grid section sections =
+sectionCanExpand grid section sections =
   let
-    sections_ = removeSectionFrom section sections
-    canPlace s = canPlaceSectionIn grid s sections_
+    sections_ = sectionRemoveFrom section sections
+    canPlace s = sectionCanBePlacedIn grid s sections_
     maybeCanPlace = Maybe.map canPlace >> Maybe.withDefault False
   in    
     { upward = sectionExpand Upward grid section |> maybeCanPlace
@@ -251,8 +252,8 @@ canExpandSection grid section sections =
     , rightward = sectionExpand Rightward grid section |> maybeCanPlace
     }
 
-removeSectionFrom : Section -> List Section -> List Section
-removeSectionFrom (Section {row,col}) sections =
+sectionRemoveFrom : Section -> List Section -> List Section
+sectionRemoveFrom (Section {row,col}) sections =
   listRemoveWhere (\(Section s) -> s.row == row && s.col == col) sections
 
 gridSectionElements : Grid -> List Section -> List SectionElement

@@ -56,10 +56,10 @@ update msg model =
       Grid.removeSection section model
 
     ExpandLeftward section ->
-      Grid.expandLeftward section model
+      Grid.expandSectionLeftward section model
 
     ExpandRightward section ->
-      Grid.expandRightward section model
+      Grid.expandSectionRightward section model
 
 view : Model -> Html Msg
 view model =
@@ -115,7 +115,7 @@ viewSectionControls : Model -> SectionElement -> Html Msg
 viewSectionControls model el =
   let
     canExpand section =
-      Grid.canExpand section model
+      Grid.canExpandSection section model
 
     expandButton msg symb =
       button [onClick <| msg] [text symb]

@@ -31,8 +31,10 @@ type Msg
   | RemoveCol
   | AddSection Placeholder
   | RemoveSection Section
-  | ExpandRightward Section
+  | ExpandUpward Section
   | ExpandLeftward Section
+  | ExpandDownward Section
+  | ExpandRightward Section
 
 update : Msg -> Model -> Model
 update msg model =
@@ -55,8 +57,14 @@ update msg model =
     RemoveSection section ->
       Grid.removeSection section model
 
+    ExpandUpward section ->
+      Grid.expandSectionUpward section model
+
     ExpandLeftward section ->
       Grid.expandSectionLeftward section model
+
+    ExpandDownward section ->
+      Grid.expandSectionDownward section model
 
     ExpandRightward section ->
       Grid.expandSectionRightward section model
@@ -124,8 +132,10 @@ viewSectionControls model el =
       let
         exp = canExpand section 
       in
-        ( if exp.leftward then [ expandButton (ExpandLeftward section) "<" ] else [])   ++
-        ( if exp.rightward then [ expandButton (ExpandRightward section) ">" ] else [])
+        ( if exp.upward then [ expandButton (ExpandUpward section) "⇡" ] else [])   ++
+        ( if exp.leftward then [ expandButton (ExpandLeftward section) "⇠" ] else [])   ++
+        ( if exp.downward then [ expandButton (ExpandDownward section) "⇣" ] else [])   ++
+        ( if exp.rightward then [ expandButton (ExpandRightward section) "⇢" ] else [])
 
     controls =
       case el of

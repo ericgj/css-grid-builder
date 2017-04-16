@@ -3,7 +3,8 @@ module Grid exposing
   , empty, mapGrid
   , addRow, addCol, removeRow, removeCol
   , addSection, removeSection, placeSection
-  , canExpandSection, expandSectionLeftward, expandSectionRightward
+  , canExpandSection, expandSectionUpward, expandSectionLeftward
+  , expandSectionDownward, expandSectionRightward
   , sectionElements, gridStyles, gridSectionStyles
   , setRowGap, setColGap, setGap
   )
@@ -133,8 +134,10 @@ expandSection direction section (Model model) =
       |> Maybe.map (\s -> placeSection s model_)
       |> Maybe.withDefault model_
 
-expandSectionRightward = expandSection Rightward
+expandSectionUpward = expandSection Upward
 expandSectionLeftward = expandSection Leftward
+expandSectionDownward = expandSection Downward
+expandSectionRightward = expandSection Rightward
 
 sectionElements : Model -> List SectionElement
 sectionElements (Model {grid,sections}) =

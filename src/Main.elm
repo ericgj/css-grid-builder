@@ -20,6 +20,7 @@ init : Model
 init =
   Grid.empty 
     |> Grid.mapGrid (Grid.setGap (Px 10))
+    |> Grid.addRow (MinContent) (MinContent)
 
 defaultRowUnit = Abs (Px 100)
 defaultColUnit = Fr 1
@@ -100,58 +101,121 @@ viewColControls =
 viewGrid : Model -> Html Msg
 viewGrid model =
   div [ style <| Grid.gridStyles model ]
-    <| List.map (viewSection model) (Grid.sectionElements model) 
+    <| List.map (viewSectionEl model) (Grid.sectionElements model) 
 
-viewSection : Model -> SectionElement -> Html Msg
-viewSection model el =
+viewSectionEl : Model -> SectionElement -> Html Msg
+viewSectionEl model el =
   let
-    attrs =
+    commonAttrs =
+      [ class "grid-section", style <| Grid.gridSectionStyles el ]
+
+    (attrs, body) =
       case el of
         PlaceholderElement placeholder ->
-          [ onClick <| AddSection placeholder ]
-        SectionElement _ ->
-          []
+          case (Grid.placeholderInRow 0 placeholder, Grid.placeholderInCol 0 placeholder) of
+            (True, True) ->
+              ( [ class "grid-section-corner" ]
+              , [ ]
+              )
+
+            (True, False) ->
+              ( [ class "grid-section-colheader"]
+              , [ viewColHeader model placeholder ]
+              )
+
+            (False, True) ->
+              ( [ class "grid-section-rowheader"]
+              , [ viewRowHeader model placeholder]
+              )
+
+            (False, False) ->
+              ( [ class "grid-section-placeholder"
+                , onClick <| AddSection placeholder 
+                ]
+              , [ ]
+              )
+
+        SectionElement section ->
+            ( [ ]
+            , [ viewSectionControls model section
+              , viewSectionBody section
+              ]
+            )
   in
     div 
-      ( [ class "grid-section", style <| Grid.gridSectionStyles el ] ++ attrs 
-      )
-      [ viewSectionControls model el
-      , viewSectionBody el
-      ]
+      ( commonAttrs ++ attrs )
+      body
 
-viewSectionControls : Model -> SectionElement -> Html Msg
-viewSectionControls model el =
+viewColHeader : Model -> Placeholder -> Html Msg
+viewColHeader model placeholder =
+  Grid.placeholderCol placeholder
+    |> (\i -> Grid.colUnit i model |> Maybe.map (\u -> viewGridUnit i u))
+    |> Maybe.withDefault (text "")
+
+viewRowHeader : Model -> Placeholder -> Html Msg
+viewRowHeader model placeholder =
+  Grid.placeholderRow placeholder
+    |> (\i -> Grid.rowUnit i model |> Maybe.map (\u -> viewGridUnit i u))
+    |> Maybe.withDefault (text "")
+
+viewGridUnit : Int -> GridUnit -> Html Msg
+viewGridUnit index unit =
+  div [] [ text <| gridUnitToString unit ]
+
+viewSectionControls : Model -> Section -> Html Msg
+viewSectionControls model section =
   let
-    canExpand section =
+    canExpand =
       Grid.canExpandSection section model
+        |> exceptIfSecondRowOrCol
+
+    exceptIfSecondRowOrCol exp =
+      { exp 
+          | upward = exp.upward && (Grid.sectionInRow 1 section |> not)
+          , leftward = exp.leftward && (Grid.sectionInCol 1 section |> not)
+      }
 
     expandButton msg symb =
       button [onClick <| msg] [text symb]
 
-    spanControls section =
+    spanControls =
       let
-        exp = canExpand section 
+        exp = canExpand 
       in
         ( if exp.upward then [ expandButton (ExpandUpward section) "⇡" ] else [])   ++
         ( if exp.leftward then [ expandButton (ExpandLeftward section) "⇠" ] else [])   ++
         ( if exp.downward then [ expandButton (ExpandDownward section) "⇣" ] else [])   ++
         ( if exp.rightward then [ expandButton (ExpandRightward section) "⇢" ] else [])
 
-    controls =
-      case el of
-        PlaceholderElement _ -> 
-          []
-        SectionElement section ->
-          [ button [onClick <| RemoveSection section] [text "⨯"] ]
-          ++ (spanControls section)
   in
-    div [ class "grid-section-controls" ] controls
+    div 
+      [ class "grid-section-controls" ] 
+      ( [ button [onClick <| RemoveSection section] [text "⨯"] ] ++ spanControls
+      )
 
-viewSectionBody : SectionElement -> Html Msg
-viewSectionBody el =
+viewSectionBody : Section -> Html Msg
+viewSectionBody section =
   div 
     [ class "grid-section-body" 
     ]
     [
     ]
+
+
+
+-- Temporary
+
+absoluteUnitToString : AbsoluteUnit -> String
+absoluteUnitToString unit =
+  case unit of
+    Px i -> (toString i) ++ "px"
+    Rem i -> (toString i) ++ "rem"
+
+gridUnitToString : GridUnit -> String
+gridUnitToString unit =
+  case unit of
+    Abs u -> absoluteUnitToString u
+    Fr i -> (toString i) ++ "fr"
+    MinContent -> "min-content"
+
 

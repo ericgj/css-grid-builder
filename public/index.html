@@ -4,16 +4,39 @@
   <style>
     html {
       background: #F0F0F0;
-      color: red;
+      font: 1vw/1.1 Verdana, sans-serif;
+    }
+    .grid-controls {
+      margin-bottom: 1rem;
     }
     .grid-section {
       background: white;
-      border: 1px solid lightgrey;
+      border: 1px solid #ccc;
     }
+    .grid-section-placeholder {
+      background-color: inherit;
+      border: 1px dashed #ccc;
+    }
+    .grid-section-corner {
+      background-color: inherit;
+      border: 0;
+    }
+    .grid-section-colheader {
+      background-color: inherit;
+      border: 0;
+      border-left: 1px dashed #000;
+      padding-left: 0.25rem;
+    }
+    .grid-section-rowheader {
+      background-color: inherit;
+      border: 0;
+      border-top: 1px dashed #000;
+      padding-top: 0.25rem;
+    }
+
     .grid-controls > * {
       display: inline-block;
       padding-right: 0.5rem;
-      font-size: 0.75rem;
     }
   </style>
 </head>

@@ -3,10 +3,12 @@ module Grid exposing
   , empty, mapGrid
   , addRow, addCol, removeRow, removeCol
   , addSection, removeSection, placeSection
+  , sectionInRow, sectionInCol
   , canExpandSection, expandSectionUpward, expandSectionLeftward
   , expandSectionDownward, expandSectionRightward
+  , placeholderRow, placeholderCol, placeholderInRow, placeholderInCol
   , sectionElements, gridStyles, gridSectionStyles
-  , setRowGap, setColGap, setGap
+  , rowUnit, colUnit, setRowGap, setColGap, setGap, setRowUnit, setColUnit
   )
 
 type Model =
@@ -139,6 +141,15 @@ expandSectionLeftward = expandSection Leftward
 expandSectionDownward = expandSection Downward
 expandSectionRightward = expandSection Rightward
 
+
+rowUnit : Int -> Model -> Maybe GridUnit
+rowUnit index (Model {grid}) =
+  gridRowUnit index grid
+
+colUnit : Int -> Model -> Maybe GridUnit
+colUnit index (Model {grid}) =
+  gridColUnit index grid
+
 sectionElements : Model -> List SectionElement
 sectionElements (Model {grid,sections}) =
   gridSectionElements grid sections
@@ -163,6 +174,14 @@ emptyGrid =
     , rowGap = Px 0
     , colGap = Px 0
     }
+
+gridRowUnit : Int -> Grid -> Maybe GridUnit
+gridRowUnit index (Grid {rows}) =
+  listGetAt ((List.length rows) - index - 1) rows
+
+gridColUnit : Int -> Grid -> Maybe GridUnit
+gridColUnit index (Grid {cols}) =
+  listGetAt ((List.length cols) - index - 1) cols
 
 setRowGap : AbsoluteUnit -> Grid -> Grid
 setRowGap unit (Grid grid) =
@@ -192,6 +211,13 @@ removeGridCol : Grid -> Grid
 removeGridCol (Grid grid) =
   Grid { grid | cols = List.tail grid.cols |> Maybe.withDefault [] }
 
+setRowUnit : Int -> GridUnit -> Grid -> Grid
+setRowUnit index unit (Grid grid) =
+  Grid { grid | rows = listSetAt index unit grid.rows |> Maybe.withDefault grid.rows }
+
+setColUnit : Int -> GridUnit -> Grid -> Grid
+setColUnit index unit (Grid grid) =
+  Grid { grid | cols = listSetAt index unit grid.cols |> Maybe.withDefault grid.cols }
 
 gridToStyles : Grid -> List (String, String)
 gridToStyles (Grid {rows, cols, colGap, rowGap}) =
@@ -228,6 +254,14 @@ gridColsToString = List.map gridUnitToString >> List.reverse >> String.join " "
 sectionAt : (Int, Int) -> Section
 sectionAt (row, col) =
   rectSection {top = row, left = col, bottom = row, right = col}
+
+sectionInRow : Int -> Section -> Bool
+sectionInRow r (Section {row,rowSpan}) =
+  r >= row && r < (row + rowSpan)
+
+sectionInCol : Int -> Section -> Bool
+sectionInCol c (Section {col,colSpan}) =
+  c >= col && c < (col + colSpan)
 
 sectionCanBePlacedIn : Grid -> Section -> List Section -> Bool
 sectionCanBePlacedIn grid section sections =
@@ -377,6 +411,25 @@ sectionShift direction grid (Section section) =
     else
       Nothing
 
+{-------------------------------------------------------------------------------
+  PLACEHOLDER
+-------------------------------------------------------------------------------}
+
+placeholderRowCol : Placeholder -> (Int,Int)
+placeholderRowCol (Placeholder {row,col}) =
+  (row, col)
+
+placeholderRow = placeholderRowCol >> Tuple.first
+placeholderCol = placeholderRowCol >> Tuple.second
+
+placeholderInRow : Int -> Placeholder -> Bool
+placeholderInRow r (Placeholder {row}) =
+  r == row
+
+placeholderInCol : Int -> Placeholder -> Bool
+placeholderInCol c (Placeholder {col}) =
+  c == col
+
 
 {-------------------------------------------------------------------------------
   SECTION ELEMENT
@@ -389,6 +442,7 @@ sectionElement section =
 placeholderElementAt : (Int, Int) -> SectionElement
 placeholderElementAt (row,col) =
   PlaceholderElement (Placeholder { row = row, col = col })
+
 
 sectionElementToStyles : SectionElement -> List (String, String)
 sectionElementToStyles section =
@@ -409,21 +463,34 @@ sectionToStyles (Section {row,col,rowSpan,colSpan}) =
   in
     [ ("grid-row", stringDim row rowSpan)
     , ("grid-column", stringDim col colSpan)
-    , ("background-color", "#FFF")
-    , ("border", "1px solid #CCC")
     ]
 
 placeholderToStyles : Placeholder -> List (String, String)
 placeholderToStyles (Placeholder {row,col}) =
   [ ("grid-row", row + 1 |> toString)
   , ("grid-column", col + 1 |> toString)
-  , ("background-color", "inherit")
-  , ("border", "1px dashed #CCC")
   ]
 
 
 
 -- UTILS
+
+listGetAt : Int -> List a -> Maybe a
+listGetAt index list =
+  if index < 0 then
+    Nothing
+  else
+    List.head <| List.drop index list
+
+listSetAt : Int -> a -> List a -> Maybe (List a)
+listSetAt index a list =
+  if index < 0 then
+    Nothing
+  else
+    let
+      (head, tail) = (List.take index list, List.drop index list |> List.tail)
+    in
+      Maybe.map (\t -> a :: t |> List.append head) tail
 
 listFind : (a -> Bool) -> List a -> Maybe a
 listFind predicate list =

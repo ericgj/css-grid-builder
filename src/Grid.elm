@@ -2,6 +2,8 @@ module Grid exposing
   ( Model, Section, Placeholder, SectionElement(..), StandardUnit(..), GridUnit(..)
   , empty, mapGrid
   , addRow, addCol, removeRow, removeCol, setRowHeight, setColWidth
+  , px, rem, fr, minContent, gridUnit
+  , gridUnitIsPx, gridUnitIsRem, gridUnitIsFr, gridUnitIsMinContent
   , gridUnitToString, gridUnitValue, gridUnitSetValue, gridUnitRange
   , addSection, removeSection, placeSection
   , sectionInRow, sectionInCol
@@ -59,12 +61,12 @@ type GridDirection
 
 type GridUnit
   = StdUnit StandardUnit
-  | Fr Int
+  | Fr Float
   | MinContent
   
 type StandardUnit
-  = Px Int
-  | Rem Int
+  = Px Float
+  | Rem Float
 
 
 {-------------------------------------------------------------------------------
@@ -251,27 +253,80 @@ gridColsToString = List.map gridUnitToString >> List.reverse >> String.join " "
   GRID UNIT
 -------------------------------------------------------------------------------}
 
-gridUnitValue : GridUnit -> Maybe Int
+px : Float -> StandardUnit
+px i = Px i
+
+rem : Float -> StandardUnit
+rem i = Rem i
+
+fr : Float -> GridUnit
+fr i = Fr i
+
+minContent : GridUnit
+minContent = MinContent
+
+gridUnit : StandardUnit -> GridUnit
+gridUnit u = StdUnit u
+
+gridUnitIsPx : GridUnit -> Bool
+gridUnitIsPx unit =
+  case unit of
+    StdUnit u -> standardUnitIsPx u
+    _ -> False
+
+gridUnitIsRem : GridUnit -> Bool
+gridUnitIsRem unit =
+  case unit of
+    StdUnit u -> standardUnitIsRem u
+    _ -> False
+
+gridUnitIsFr : GridUnit -> Bool
+gridUnitIsFr unit =
+  case unit of
+    Fr i -> True
+    _ -> False
+
+gridUnitIsMinContent : GridUnit -> Bool
+gridUnitIsMinContent unit =
+  case unit of
+    MinContent -> True
+    _ -> False
+
+standardUnitIsPx : StandardUnit -> Bool
+standardUnitIsPx unit =
+  case unit of
+    Px _ -> True
+    _ -> False
+
+standardUnitIsRem : StandardUnit -> Bool
+standardUnitIsRem unit =
+  case unit of
+    Rem _ -> True
+    _ -> False
+
+
+
+gridUnitValue : GridUnit -> Maybe Float
 gridUnitValue unit =
   case unit of
     StdUnit u -> standardUnitValue u
     Fr i -> Just i
     MinContent -> Nothing
 
-standardUnitValue : StandardUnit -> Maybe Int
+standardUnitValue : StandardUnit -> Maybe Float
 standardUnitValue unit =
   case unit of
     Px i -> Just i
     Rem i -> Just i
 
-gridUnitSetValue : Int -> GridUnit -> GridUnit
+gridUnitSetValue : Float -> GridUnit -> GridUnit
 gridUnitSetValue value unit =
   case unit of
     StdUnit u -> StdUnit <| standardUnitSetValue value u
     Fr i -> Fr value
     MinContent -> MinContent
 
-standardUnitSetValue : Int -> StandardUnit -> StandardUnit
+standardUnitSetValue : Float -> StandardUnit -> StandardUnit
 standardUnitSetValue value unit =
   case unit of
     Px i -> Px value
@@ -288,8 +343,8 @@ gridUnitRange unit =
 standardUnitRange : StandardUnit -> Maybe {min: Float, max: Float, step: Float}
 standardUnitRange unit =
   case unit of
-    Px _ -> Just { min = 1, max = 1000, step = 1 }
-    Rem _ -> Just { min = 0.1, max = 10, step = 0.1 }
+    Px _ -> Just { min = 10, max = 1000, step = 1 }
+    Rem _ -> Just { min = 1, max = 10, step = 0.1 }
 
 
 gridUnitToString : GridUnit -> String

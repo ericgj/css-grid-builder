@@ -1,11 +1,13 @@
 module Main exposing (..)
 
+import Json.Decode as JD
+
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 
 import Grid exposing 
-  (Model, Section, Placeholder, SectionElement(..), GridUnit(..), StandardUnit(..) )
+  (Model, Section, Placeholder, GridUnit, SectionElement(..), px, rem, gridUnit, fr, minContent )
 
 
 main : Program Never Model Msg
@@ -19,11 +21,11 @@ main =
 init : Model
 init =
   Grid.empty 
-    |> Grid.mapGrid (Grid.setGap (Px 10))
-    |> Grid.addRow (MinContent) (MinContent)
+    |> Grid.mapGrid (Grid.setGap (px 10))
+    |> Grid.addRow (minContent) (minContent)
 
-defaultRowUnit = StdUnit (Px 100)
-defaultColUnit = Fr 1
+defaultRowUnit = gridUnit <| px 100
+defaultColUnit = fr 1
 
 type Msg 
   = AddRow GridUnit
@@ -180,11 +182,34 @@ viewUnit tagger index unit =
         , onInput (parseUnitValue >> tagger index)
         ] [ ]
 
-    parseUnitValue : String -> GridUnit
     parseUnitValue s =
-      String.toInt s
+      String.toFloat s
         |> Result.map (\n -> Grid.gridUnitSetValue n unit)
         |> Result.withDefault unit
+
+    unitControl =
+      select 
+        [ onChange (parseUnit >> tagger index) ]
+        [ option [ value "px", selected <| Grid.gridUnitIsPx unit ]
+                 [ text "px" ] 
+        , option [ value "rem", selected <| Grid.gridUnitIsRem unit ]
+                 [ text "rem" ] 
+        , option [ value "fr", selected <| Grid.gridUnitIsFr unit ]
+                 [ text "fr" ] 
+        , option [ value "min-content", selected <| Grid.gridUnitIsMinContent unit ]
+                 [ text "min-content" ] 
+        ]
+
+    parseUnit sunit =
+      let
+        defaultUnitValue = Grid.gridUnitRange >> (Maybe.map .min) >> (Maybe.withDefault 1.0)
+      in
+        case sunit of
+          "px" ->  px 1 |> gridUnit |> defaultUnitValue |> px |> gridUnit
+          "rem" -> Grid.rem 1 |> gridUnit |> defaultUnitValue |> Grid.rem |> gridUnit
+          "fr" -> fr 1 |> defaultUnitValue |> fr
+          "min-content" -> minContent
+          _ -> fr 1
 
   in
     div [] 
@@ -194,6 +219,9 @@ viewUnit tagger index unit =
             ( Grid.gridUnitRange unit )
               |> Maybe.withDefault (text <| Grid.gridUnitToString unit)
         ]
+      , div [ class "test-test" ] [ ]
+      , div [ class "grid-unit-unit" ]
+        [ unitControl ]
       ]
              
 viewSectionControls : Model -> Section -> Html Msg
@@ -236,4 +264,11 @@ viewSectionBody section =
     ]
 
 
+
+
+-- UTILS
+
+onChange : (String -> msg) -> Html.Attribute msg
+onChange tagger =
+  Html.Events.on "change" (JD.map tagger Html.Events.targetValue)
 

@@ -5,7 +5,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 
 import Grid exposing 
-  (Model, Section, Placeholder, SectionElement(..), AbsoluteUnit(..), GridUnit(..))
+  (Model, Section, Placeholder, SectionElement(..), GridUnit(..), StandardUnit(..) )
 
 
 main : Program Never Model Msg
@@ -22,7 +22,7 @@ init =
     |> Grid.mapGrid (Grid.setGap (Px 10))
     |> Grid.addRow (MinContent) (MinContent)
 
-defaultRowUnit = Abs (Px 100)
+defaultRowUnit = StdUnit (Px 100)
 defaultColUnit = Fr 1
 
 type Msg 
@@ -30,6 +30,8 @@ type Msg
   | AddCol GridUnit
   | RemoveRow
   | RemoveCol
+  | SetRowHeight Int GridUnit
+  | SetColWidth Int GridUnit
   | AddSection Placeholder
   | RemoveSection Section
   | ExpandUpward Section
@@ -51,6 +53,12 @@ update msg model =
 
     RemoveCol ->
       Grid.removeCol model
+
+    SetRowHeight index unit ->
+      Grid.setRowHeight index unit model
+
+    SetColWidth index unit ->
+      Grid.setColWidth index unit model
  
     AddSection placeholder ->
       Grid.addSection placeholder model
@@ -149,19 +157,45 @@ viewSectionEl model el =
 viewColHeader : Model -> Placeholder -> Html Msg
 viewColHeader model placeholder =
   Grid.placeholderCol placeholder
-    |> (\i -> Grid.colUnit i model |> Maybe.map (\u -> viewGridUnit i u))
+    |> (\i -> Grid.colUnit i model |> Maybe.map (\u -> viewUnit SetColWidth i u))
     |> Maybe.withDefault (text "")
 
 viewRowHeader : Model -> Placeholder -> Html Msg
 viewRowHeader model placeholder =
   Grid.placeholderRow placeholder
-    |> (\i -> Grid.rowUnit i model |> Maybe.map (\u -> viewGridUnit i u))
+    |> (\i -> Grid.rowUnit i model |> Maybe.map (\u -> viewUnit SetRowHeight i u))
     |> Maybe.withDefault (text "")
 
-viewGridUnit : Int -> GridUnit -> Html Msg
-viewGridUnit index unit =
-  div [] [ text <| gridUnitToString unit ]
 
+viewUnit : (Int -> GridUnit -> Msg) -> Int -> GridUnit -> Html Msg
+viewUnit tagger index unit =
+  let
+    rangeControl v {min,max,step} =
+      input 
+        [ type_ "number"
+        , value (toString v)
+        , Html.Attributes.min (toString min)
+        , Html.Attributes.max (toString max)
+        , Html.Attributes.step (toString step)
+        , onInput (parseUnitValue >> tagger index)
+        ] [ ]
+
+    parseUnitValue : String -> GridUnit
+    parseUnitValue s =
+      String.toInt s
+        |> Result.map (\n -> Grid.gridUnitSetValue n unit)
+        |> Result.withDefault unit
+
+  in
+    div [] 
+      [ div [ class "grid-unit-value" ]
+        [ Maybe.map2 rangeControl
+            ( Grid.gridUnitValue unit )
+            ( Grid.gridUnitRange unit )
+              |> Maybe.withDefault (text <| Grid.gridUnitToString unit)
+        ]
+      ]
+             
 viewSectionControls : Model -> Section -> Html Msg
 viewSectionControls model section =
   let
@@ -201,21 +235,5 @@ viewSectionBody section =
     [
     ]
 
-
-
--- Temporary
-
-absoluteUnitToString : AbsoluteUnit -> String
-absoluteUnitToString unit =
-  case unit of
-    Px i -> (toString i) ++ "px"
-    Rem i -> (toString i) ++ "rem"
-
-gridUnitToString : GridUnit -> String
-gridUnitToString unit =
-  case unit of
-    Abs u -> absoluteUnitToString u
-    Fr i -> (toString i) ++ "fr"
-    MinContent -> "min-content"
 
 

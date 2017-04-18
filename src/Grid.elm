@@ -1,14 +1,15 @@
 module Grid exposing 
-  ( Model, Section, Placeholder, SectionElement(..), AbsoluteUnit(..), GridUnit(..)
+  ( Model, Section, Placeholder, SectionElement(..), StandardUnit(..), GridUnit(..)
   , empty, mapGrid
-  , addRow, addCol, removeRow, removeCol
+  , addRow, addCol, removeRow, removeCol, setRowHeight, setColWidth
+  , gridUnitToString, gridUnitValue, gridUnitSetValue, gridUnitRange
   , addSection, removeSection, placeSection
   , sectionInRow, sectionInCol
   , canExpandSection, expandSectionUpward, expandSectionLeftward
   , expandSectionDownward, expandSectionRightward
   , placeholderRow, placeholderCol, placeholderInRow, placeholderInCol
   , sectionElements, gridStyles, gridSectionStyles
-  , rowUnit, colUnit, setRowGap, setColGap, setGap, setRowUnit, setColUnit
+  , rowUnit, colUnit, setRowGap, setColGap, setGap
   )
 
 type Model =
@@ -21,8 +22,8 @@ type Grid =
   Grid
     { rows : List GridUnit
     , cols : List GridUnit
-    , rowGap : AbsoluteUnit
-    , colGap : AbsoluteUnit
+    , rowGap : StandardUnit
+    , colGap : StandardUnit
     }
 
 type Section =
@@ -57,11 +58,11 @@ type GridDirection
   | Rightward
 
 type GridUnit
-  = Abs AbsoluteUnit
+  = StdUnit StandardUnit
   | Fr Int
   | MinContent
   
-type AbsoluteUnit
+type StandardUnit
   = Px Int
   | Rem Int
 
@@ -109,6 +110,14 @@ removeRow (Model model) =
 removeCol : Model -> Model
 removeCol (Model model) =
   Model { model | grid = removeGridCol model.grid }
+
+setRowHeight : Int -> GridUnit -> Model -> Model
+setRowHeight index unit model =
+  mapGrid (setRowUnit index unit) model
+
+setColWidth : Int -> GridUnit -> Model -> Model
+setColWidth index unit model =
+  mapGrid (setColUnit index unit) model
 
 addSection : Placeholder -> Model -> Model
 addSection (Placeholder {row,col}) model =
@@ -183,15 +192,15 @@ gridColUnit : Int -> Grid -> Maybe GridUnit
 gridColUnit index (Grid {cols}) =
   listGetAt ((List.length cols) - index - 1) cols
 
-setRowGap : AbsoluteUnit -> Grid -> Grid
+setRowGap : StandardUnit -> Grid -> Grid
 setRowGap unit (Grid grid) =
   Grid { grid | rowGap = unit }
 
-setColGap : AbsoluteUnit -> Grid -> Grid
+setColGap : StandardUnit -> Grid -> Grid
 setColGap unit (Grid grid) =
   Grid { grid | colGap = unit }
 
-setGap : AbsoluteUnit -> Grid -> Grid
+setGap : StandardUnit -> Grid -> Grid
 setGap unit (Grid grid) =
   Grid { grid | rowGap = unit, colGap = unit }
 
@@ -213,37 +222,88 @@ removeGridCol (Grid grid) =
 
 setRowUnit : Int -> GridUnit -> Grid -> Grid
 setRowUnit index unit (Grid grid) =
-  Grid { grid | rows = listSetAt index unit grid.rows |> Maybe.withDefault grid.rows }
+  let
+    index_ = (List.length grid.rows - index - 1)
+  in
+    Grid { grid | rows = listSetAt index_ unit grid.rows |> Maybe.withDefault grid.rows }
 
 setColUnit : Int -> GridUnit -> Grid -> Grid
 setColUnit index unit (Grid grid) =
-  Grid { grid | cols = listSetAt index unit grid.cols |> Maybe.withDefault grid.cols }
+  let
+    index_ = (List.length grid.cols - index - 1)
+  in
+    Grid { grid | cols = listSetAt index_ unit grid.cols |> Maybe.withDefault grid.cols }
 
 gridToStyles : Grid -> List (String, String)
 gridToStyles (Grid {rows, cols, colGap, rowGap}) =
   [ ("display", "grid")
-  , ("grid-row-gap", absoluteUnitToString rowGap)
-  , ("grid-column-gap", absoluteUnitToString colGap)
+  , ("grid-row-gap", standardUnitToString rowGap)
+  , ("grid-column-gap", standardUnitToString colGap)
   , ("grid-template-rows", gridRowsToString rows)
   , ("grid-template-columns", gridColsToString cols)
   ]
 
-absoluteUnitToString : AbsoluteUnit -> String
-absoluteUnitToString unit =
+gridRowsToString = List.map gridUnitToString >> List.reverse >> String.join " "
+
+gridColsToString = List.map gridUnitToString >> List.reverse >> String.join " "
+
+{-------------------------------------------------------------------------------
+  GRID UNIT
+-------------------------------------------------------------------------------}
+
+gridUnitValue : GridUnit -> Maybe Int
+gridUnitValue unit =
   case unit of
-    Px i -> (toString i) ++ "px"
-    Rem i -> (toString i) ++ "rem"
+    StdUnit u -> standardUnitValue u
+    Fr i -> Just i
+    MinContent -> Nothing
+
+standardUnitValue : StandardUnit -> Maybe Int
+standardUnitValue unit =
+  case unit of
+    Px i -> Just i
+    Rem i -> Just i
+
+gridUnitSetValue : Int -> GridUnit -> GridUnit
+gridUnitSetValue value unit =
+  case unit of
+    StdUnit u -> StdUnit <| standardUnitSetValue value u
+    Fr i -> Fr value
+    MinContent -> MinContent
+
+standardUnitSetValue : Int -> StandardUnit -> StandardUnit
+standardUnitSetValue value unit =
+  case unit of
+    Px i -> Px value
+    Rem i -> Rem value
+
+
+gridUnitRange : GridUnit -> Maybe {min: Float, max: Float, step: Float}
+gridUnitRange unit =
+  case unit of
+    StdUnit u -> standardUnitRange u
+    Fr _ -> Just { min = 1, max = 16, step = 1 }
+    MinContent -> Nothing
+
+standardUnitRange : StandardUnit -> Maybe {min: Float, max: Float, step: Float}
+standardUnitRange unit =
+  case unit of
+    Px _ -> Just { min = 1, max = 1000, step = 1 }
+    Rem _ -> Just { min = 0.1, max = 10, step = 0.1 }
+
 
 gridUnitToString : GridUnit -> String
 gridUnitToString unit =
   case unit of
-    Abs u -> absoluteUnitToString u
+    StdUnit u -> standardUnitToString u
     Fr i -> (toString i) ++ "fr"
     MinContent -> "min-content"
 
-gridRowsToString = List.map gridUnitToString >> List.reverse >> String.join " "
-
-gridColsToString = List.map gridUnitToString >> List.reverse >> String.join " "
+standardUnitToString : StandardUnit -> String
+standardUnitToString unit =
+  case unit of
+    Px i -> (toString i) ++ "px"
+    Rem i -> (toString i) ++ "rem"
 
 
 

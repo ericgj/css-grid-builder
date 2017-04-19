@@ -5,6 +5,7 @@ import Json.Decode as JD
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
+import Html.Lazy exposing (lazy)
 
 import Grid exposing 
   (Model, Section, Placeholder, GridUnit, SectionElement(..), px, rem, gridUnit, fr, minContent )
@@ -90,7 +91,22 @@ view model =
    , div [ class "grid-container" ]
      [ viewGrid model
      ]
+   , div [ class "grid-css" ]
+     [ lazy viewCSS model
+     ]
    ]
+
+viewCSS : Model -> Html Msg
+viewCSS model =
+  let
+    noheaders = Grid.shiftRemoveFirstRow model |> Grid.shiftRemoveFirstCol
+  in
+    div []
+      [ pre []
+        [ code []
+          [ text <| Grid.gridCSS "#grid" noheaders ]
+        ]
+      ]
 
 viewRowControls : Html Msg
 viewRowControls =

@@ -3,8 +3,8 @@ html {
   background: #F0F0F0;
   font: 1vw/1.1 Verdana, sans-serif;
 }
-.grid-controls {
-  margin-bottom: 1rem;
+.grid-container {
+  margin: 1rem;
 }
 .grid-section {
   background: white;
@@ -36,6 +36,10 @@ html {
   padding-right: 0.5rem;
 }
 
+.grid-controls label {
+  padding-right: 0.25rem;
+}
+
 .grid-unit-value input {
   width: 4vw;
   font-size: inherit;
@@ -52,4 +56,14 @@ html {
   color: #00f;
 }
 
+.grid-css {
+  position: fixed;
+  bottom: 0;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  background-color: #ddc;
+  color: #000;
+  max-height: 30vh;
+  overflow-y: scroll;
+}
 

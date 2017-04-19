@@ -1,7 +1,9 @@
 module Grid exposing 
   ( Model, Section, Placeholder, SectionElement(..), StandardUnit(..), GridUnit(..)
   , empty, mapGrid
-  , addRow, addCol, removeRow, removeCol, setRowHeight, setColWidth
+  , addRow, addCol, removeRow, removeCol, shiftRemoveFirstRow, shiftRemoveFirstCol
+  , setRowHeight, setColWidth
+  , gridStyles, gridSectionStyles, gridCSS
   , px, rem, fr, minContent, gridUnit
   , gridUnitIsPx, gridUnitIsRem, gridUnitIsFr, gridUnitIsMinContent
   , gridUnitToString, gridUnitValue, gridUnitSetValue, gridUnitRange
@@ -10,7 +12,7 @@ module Grid exposing
   , canExpandSection, expandSectionUpward, expandSectionLeftward
   , expandSectionDownward, expandSectionRightward
   , placeholderRow, placeholderCol, placeholderInRow, placeholderInCol
-  , sectionElements, gridStyles, gridSectionStyles
+  , sectionElements
   , rowUnit, colUnit, setRowGap, setColGap, setGap
   )
 
@@ -113,6 +115,32 @@ removeCol : Model -> Model
 removeCol (Model model) =
   Model { model | grid = removeGridCol model.grid }
 
+shiftRemoveFirstRow : Model -> Model
+shiftRemoveFirstRow (Model model) =
+  let
+    shiftUpIfPossible section =
+      sectionShift Upward model.grid section
+        |> Maybe.withDefault section
+  in
+    Model 
+      { model 
+          | grid = removeFirstGridRow model.grid
+          , sections = List.map shiftUpIfPossible model.sections
+      }
+
+shiftRemoveFirstCol : Model -> Model
+shiftRemoveFirstCol (Model model) =
+  let
+    shiftLeftIfPossible section =
+      sectionShift Leftward model.grid section
+        |> Maybe.withDefault section
+  in
+    Model 
+      { model 
+          | grid = removeFirstGridCol model.grid
+          , sections = List.map shiftLeftIfPossible model.sections
+      }
+
 setRowHeight : Int -> GridUnit -> Model -> Model
 setRowHeight index unit model =
   mapGrid (setRowUnit index unit) model
@@ -173,6 +201,20 @@ gridStyles (Model {grid}) =
 gridSectionStyles = sectionElementToStyles
 
 
+gridCSS : String -> Model -> String
+gridCSS selector (Model {grid,sections}) =
+  let
+    toCSS i s =
+      sectionElement s
+        |> sectionElementToCSS ("#section-" ++ (toString i))
+
+    sectionCSS =
+      sections |> List.reverse |> List.indexedMap toCSS
+  in
+    String.join "\n\n"
+      ( (gridToCSS selector grid) :: sectionCSS )
+
+
 {-------------------------------------------------------------------------------
  GRID
 -------------------------------------------------------------------------------}
@@ -222,6 +264,14 @@ removeGridCol : Grid -> Grid
 removeGridCol (Grid grid) =
   Grid { grid | cols = List.tail grid.cols |> Maybe.withDefault [] }
 
+removeFirstGridRow : Grid -> Grid
+removeFirstGridRow (Grid grid) =
+  Grid { grid | rows = List.take ((List.length grid.rows) - 1) grid.rows }
+
+removeFirstGridCol : Grid -> Grid
+removeFirstGridCol (Grid grid) =
+  Grid { grid | cols = List.take ((List.length grid.cols) - 1) grid.cols }
+
 setRowUnit : Int -> GridUnit -> Grid -> Grid
 setRowUnit index unit (Grid grid) =
   let
@@ -241,13 +291,30 @@ gridToStyles (Grid {rows, cols, colGap, rowGap}) =
   [ ("display", "grid")
   , ("grid-row-gap", standardUnitToString rowGap)
   , ("grid-column-gap", standardUnitToString colGap)
-  , ("grid-template-rows", gridRowsToString rows)
-  , ("grid-template-columns", gridColsToString cols)
-  ]
+  ] ++
+  ( List.reverse rows 
+      |> gridUnitsToString 
+      |> Maybe.map (\rs -> [("grid-template-rows",rs)]) 
+      |> Maybe.withDefault []
+  ) ++
+  ( List.reverse cols
+      |> gridUnitsToString 
+      |> Maybe.map (\cs -> [("grid-template-columns",cs)]) 
+      |> Maybe.withDefault []
+  )
 
-gridRowsToString = List.map gridUnitToString >> List.reverse >> String.join " "
+gridUnitsToString : List GridUnit -> Maybe String
+gridUnitsToString units =
+  case units of
+    [] ->
+      Nothing
+    _ ->
+      List.map gridUnitToString units |> String.join " " |> Just
 
-gridColsToString = List.map gridUnitToString >> List.reverse >> String.join " "
+gridToCSS : String -> Grid -> String
+gridToCSS selector grid =
+  gridToStyles grid |> stylesToCSS selector
+
 
 {-------------------------------------------------------------------------------
   GRID UNIT
@@ -587,6 +654,10 @@ placeholderToStyles (Placeholder {row,col}) =
   ]
 
 
+sectionElementToCSS : String -> SectionElement -> String
+sectionElementToCSS selector section =
+  sectionElementToStyles section |> stylesToCSS selector
+
 
 -- UTILS
 
@@ -633,4 +704,19 @@ listRemoveWhere predicate list =
 listCombine : (a -> b -> c) -> List a -> List b -> List c
 listCombine fn a b =
   List.concatMap (\a_ -> List.map (\b_ -> fn a_ b_) b ) a
+
+
+
+stylesToCSS : String -> List (String, String) -> String
+stylesToCSS selector styles =
+  let
+    styleLines = 
+      styles
+        |> List.map (\(k,v) -> "  " ++ k ++ ": " ++ v ++ ";")
+  in
+    String.join "\n"
+        [ selector ++ " {"
+        , String.join "\n" styleLines
+        , "}"
+        ]
 

@@ -1,0 +1,55 @@
+
+html {
+  background: #F0F0F0;
+  font: 1vw/1.1 Verdana, sans-serif;
+}
+.grid-controls {
+  margin-bottom: 1rem;
+}
+.grid-section {
+  background: white;
+  border: 1px solid #ccc;
+}
+.grid-section-placeholder {
+  background-color: inherit;
+  border: 1px dashed #ccc;
+}
+.grid-section-corner {
+  background-color: inherit;
+  border: 0;
+}
+.grid-section-colheader {
+  background-color: inherit;
+  border: 0;
+  border-left: 1px solid #ccc;
+  padding-left: 0.25rem;
+}
+.grid-section-rowheader {
+  background-color: inherit;
+  border: 0;
+  border-top: 1px solid #ccc;
+  padding-top: 0.25rem;
+}
+
+.grid-controls > * {
+  display: inline-block;
+  padding-right: 0.5rem;
+}
+
+.grid-unit-value input {
+  width: 4vw;
+  font-size: inherit;
+  border: 0;
+  background-color: inherit;
+  color: #00f;
+}
+
+.grid-unit-unit select {
+  width: 4vw;
+  font-size: inherit;
+  border: 0;
+  background-color: inherit;
+  color: #00f;
+}
+
+

@@ -41,6 +41,8 @@ type Msg
   | ExpandLeftward Section
   | ExpandDownward Section
   | ExpandRightward Section
+  | NameSection Section (Maybe String)
+
 
 update : Msg -> Model -> Model
 update msg model =
@@ -80,6 +82,12 @@ update msg model =
 
     ExpandRightward section ->
       Grid.expandSectionRightward section model
+
+    NameSection section name ->
+      case name of
+        Just s -> Grid.nameSection s section model
+        Nothing -> Grid.unnameSection section model
+
 
 view : Model -> Html Msg
 view model =
@@ -273,11 +281,24 @@ viewSectionControls model section =
 
 viewSectionBody : Section -> Html Msg
 viewSectionBody section =
-  div 
-    [ class "grid-section-body" 
-    ]
-    [
-    ]
+  let 
+    parseInput s =
+      if String.length s == 0 then Nothing else Just s
+    currentValue =
+      Grid.sectionName section
+  in
+    div 
+      [ class "grid-section-body" 
+      ]
+      [ div [ class "grid-section-name" ]
+        [ input
+            [ type_ "text"
+            , onInput (parseInput >> NameSection section)
+            , placeholder "Name this section"
+            , value (currentValue |> Maybe.withDefault "")
+            ] [ ]
+        ]
+      ]
 
 
 

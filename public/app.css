@@ -1,8 +1,15 @@
 
+
 html {
   background: #F0F0F0;
   font: 1vw/1.1 Verdana, sans-serif;
+  box-sizing: inherit;
 }
+
+*, *:before, *:after {
+  box-sizing: border-box;
+}
+
 .grid-container {
   margin: 1rem;
 }
@@ -46,6 +53,17 @@ html {
   border: 0;
   background-color: inherit;
   color: #00f;
+}
+
+.grid-section-name input {
+  width: 90%;
+  padding: 0.5rem;
+  background-color: inherit;
+  color: #00f;
+  border: 0;
+  font-size: 2rem;
+  font-weight: bold;
+  text-align: center;
 }
 
 .grid-unit-unit select {

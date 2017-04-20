@@ -7,14 +7,16 @@ module Grid exposing
   , px, rem, fr, minContent, gridUnit
   , gridUnitIsPx, gridUnitIsRem, gridUnitIsFr, gridUnitIsMinContent
   , gridUnitToString, gridUnitValue, gridUnitSetValue, gridUnitRange
-  , addSection, removeSection, placeSection
-  , sectionInRow, sectionInCol
+  , addSection, removeSection, nameSection, unnameSection, placeSection
+  , sectionInRow, sectionInCol, sectionName
   , canExpandSection, expandSectionUpward, expandSectionLeftward
   , expandSectionDownward, expandSectionRightward
   , placeholderRow, placeholderCol, placeholderInRow, placeholderInCol
   , sectionElements
   , rowUnit, colUnit, setRowGap, setColGap, setGap
   )
+
+import Regex exposing (regex)
 
 type Model =
   Model
@@ -36,6 +38,12 @@ type Section =
     , col : Int
     , rowSpan : Int
     , colSpan : Int
+    , content : SectionContent
+    }
+
+type SectionContent =
+  SectionContent
+    { name : Maybe String
     }
 
 type Placeholder =
@@ -153,9 +161,21 @@ addSection : Placeholder -> Model -> Model
 addSection (Placeholder {row,col}) model =
   placeSection (sectionAt (row,col)) model
 
+nameSection : String -> Section -> Model -> Model
+nameSection name section model =
+  updateSection (sectionSetName name section) model 
+
+unnameSection : Section -> Model -> Model
+unnameSection section model =
+  updateSection (sectionClearName section) model
+
 removeSection : Section -> Model -> Model
 removeSection section (Model model) =
   Model { model | sections = sectionRemoveFrom section model.sections }
+
+updateSection : Section -> Model -> Model
+updateSection section (Model model) =
+  Model { model | sections = sectionUpdateIn section model.sections }
 
 placeSection : Section -> Model -> Model
 placeSection section (Model model) =
@@ -204,9 +224,14 @@ gridSectionStyles = sectionElementToStyles
 gridCSS : String -> Model -> String
 gridCSS selector (Model {grid,sections}) =
   let
+    sectionClass i s =
+      sectionName s
+        |> Maybe.map slugify
+        |> Maybe.withDefault ("section-" ++ (toString i))
+      
     toCSS i s =
       sectionElement s
-        |> sectionElementToCSS ("#section-" ++ (toString i))
+        |> sectionElementToCSS ("#" ++ sectionClass i s)
 
     sectionCSS =
       sections |> List.reverse |> List.indexedMap toCSS
@@ -437,6 +462,14 @@ sectionAt : (Int, Int) -> Section
 sectionAt (row, col) =
   rectSection {top = row, left = col, bottom = row, right = col}
 
+sectionSetName : String -> Section -> Section
+sectionSetName name (Section section) =
+  Section { section | content = sectionContentSetName name section.content }
+
+sectionClearName : Section -> Section
+sectionClearName (Section section) =
+  Section { section | content = sectionContentClearName section.content }
+
 sectionInRow : Int -> Section -> Bool
 sectionInRow r (Section {row,rowSpan}) =
   r >= row && r < (row + rowSpan)
@@ -444,6 +477,10 @@ sectionInRow r (Section {row,rowSpan}) =
 sectionInCol : Int -> Section -> Bool
 sectionInCol c (Section {col,colSpan}) =
   c >= col && c < (col + colSpan)
+
+sectionName : Section -> Maybe String
+sectionName (Section {content}) =
+  sectionContentName content
 
 sectionCanBePlacedIn : Grid -> Section -> List Section -> Bool
 sectionCanBePlacedIn grid section sections =
@@ -474,6 +511,12 @@ sectionCanExpand grid section sections =
 sectionRemoveFrom : Section -> List Section -> List Section
 sectionRemoveFrom (Section {row,col}) sections =
   listRemoveWhere (\(Section s) -> s.row == row && s.col == col) sections
+
+sectionUpdateIn : Section -> List Section -> List Section
+sectionUpdateIn (Section section) sections =
+  listUpdateWhere 
+    (\(Section s) -> s.row == section.row && s.col == section.col) 
+    (Section section) sections 
 
 gridSectionElements : Grid -> List Section -> List SectionElement
 gridSectionElements grid sections =
@@ -506,7 +549,13 @@ sectionRect (Section {row,col,rowSpan,colSpan}) =
 
 rectSection : Rect -> Section
 rectSection {top,left,bottom,right} =
-  Section { row = top, col = left, rowSpan = bottom - top + 1, colSpan = right - left + 1 }
+  Section 
+    { row = top
+    , col = left
+    , rowSpan = bottom - top + 1
+    , colSpan = right - left + 1 
+    , content = emptySectionContent
+    }
 
 gridRect : Grid -> Rect
 gridRect (Grid {rows,cols}) =
@@ -592,6 +641,26 @@ sectionShift direction grid (Section section) =
       Just newSection
     else
       Nothing
+
+{-------------------------------------------------------------------------------
+  SECTION CONTENT
+-------------------------------------------------------------------------------}
+
+emptySectionContent : SectionContent
+emptySectionContent =
+  SectionContent { name = Nothing }
+
+sectionContentSetName : String -> SectionContent -> SectionContent
+sectionContentSetName name (SectionContent content) =
+  SectionContent { content | name = Just name }
+
+sectionContentClearName : SectionContent -> SectionContent
+sectionContentClearName (SectionContent content) =
+  SectionContent { content | name = Nothing }
+
+sectionContentName : SectionContent -> Maybe String
+sectionContentName (SectionContent {name}) =
+  name
 
 {-------------------------------------------------------------------------------
   PLACEHOLDER
@@ -700,6 +769,17 @@ listRemoveWhere predicate list =
   in
     List.foldr accum [] list
 
+listUpdateWhere : (a -> Bool) -> a -> List a -> List a
+listUpdateWhere predicate replace list =
+  let
+    accum a newlist =
+      if predicate a then
+        replace :: newlist
+      else
+        a :: newlist
+  in
+    List.foldr accum [] list
+
 
 listCombine : (a -> b -> c) -> List a -> List b -> List c
 listCombine fn a b =
@@ -719,4 +799,9 @@ stylesToCSS selector styles =
         , String.join "\n" styleLines
         , "}"
         ]
+
+slugify : String -> String
+slugify s =
+  String.toLower s
+    |> Regex.replace Regex.All (regex "[^A-Za-z\\-]") (always "-")
 
